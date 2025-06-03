@@ -82,6 +82,7 @@ function serve-coverage-report {
 
 # build a wheel and sdist from the Python source code
 function build {
+    rm -rf "$THIS_DIR/dist"
     python -m build --sdist --wheel "$THIS_DIR/"
 }
 

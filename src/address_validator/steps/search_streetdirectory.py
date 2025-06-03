@@ -1,42 +1,74 @@
-# src/address_validator/steps/search_streetdirectory.py
+"""
+Validation step for querying and filtering StreetDirectory search results.
+
+This module defines a `SearchStreetDirectoryStep` that uses the StreetDirectoryClient
+to query address data based on OneMap-derived address parts (block, street, and postal code).
+The results are filtered to exclude certain categories and substrings defined in constants.
+Filtered results are stored in the context, or appropriate validation statuses are set if
+the search fails or returns no acceptable matches.
+"""
 
 import address_validator.streetdirectory_client as sd_client_module
 from address_validator.constants import (
+    ONEMAP_RESULTS_BY_POSTCODE,
     STREETDIR_CATEGORY_SUBSTRING_EXCLUSIONS,
     STREETDIR_EXACT_CATEGORY_EXCLUSIONS,
-)
-from address_validator.onemap_client import (
-    ONEMAP_BLK_NO_KEY,
-    ONEMAP_POSTCODE_KEY,
-    ONEMAP_STREET_KEY,
+    STREETDIRECTORY_RESULTS_BY_FULL_ADDRESS,
+    VALIDATE_STATUS,
 )
 from address_validator.steps.base import ValidationStep
 from address_validator.streetdirectory_client import (
     SearchResponseStatus,
     StreetDirectorySearchResult,
 )
+from address_validator.utils.common import extract_address_query_parts
 from address_validator.validation import ValidateStatus
 
 
 class SearchStreetDirectoryStep(ValidationStep):
     """
-    Query StreetDirectory using the first element of onemap_data and save all results,
-    handling fetch errors via the new StreetDirectoryClient.search(...) facade.
-    Excludes any result whose category is exactly one of STREETDIR_EXACT_CATEGORY_EXCLUSIONS
-    or contains any substring from STREETDIR_CATEGORY_SUBSTRING_EXCLUSIONS.
+    A validation step that queries StreetDirectory using parsed address components.
+
+    This step constructs a query string from OneMap-derived or parsed block, street, and postal code.
+    It calls the `StreetDirectoryClient` to search for matching addresses. The returned results are:
+    - Validated for API status.
+    - Filtered to exclude certain categories defined by exact matches or substrings.
+    - Stored in the context if valid results remain.
+
+    If the query fails, returns no results, or all results are excluded, an appropriate `ValidateStatus`
+    is set in the context to reflect the failure reason.
+
+    This step helps enhance address validation by cross-referencing StreetDirectory's
+    business and residential listings.
     """
 
     def __call__(self, ctx: dict) -> dict:
-        onemap_data = ctx.get("onemap_data") or []
-        if not onemap_data:
-            return ctx
+        """
+        Executes the StreetDirectory search step in the validation pipeline.
 
-        first = onemap_data[0]
-        blk = first.get(ONEMAP_BLK_NO_KEY, "")
-        if blk == "NIL":
-            blk = ""
-        street = first.get(ONEMAP_STREET_KEY, "")
-        pcode = first.get(ONEMAP_POSTCODE_KEY, "")
+        Args:
+            ctx (dict): Validation context containing parsed or OneMap address components.
+
+        Returns:
+            dict: Updated context including:
+                - Filtered StreetDirectory results (if any),
+                - Or a validation status indicating failure or no matches.
+
+        Behavior:
+            - Extracts (blk, street, postcode) from context using OneMap or fallback parser.
+            - Forms a query string and sends it to StreetDirectoryClient.
+            - Filters results based on configured category exclusions.
+            - Updates context with results or error status accordingly.
+        """
+        blk, street, pcode = extract_address_query_parts(
+            ctx,
+            prefer_onemap=True,
+            onemap_key=ONEMAP_RESULTS_BY_POSTCODE,
+            fallback_to_parsed=True,
+        )
+
+        if not any([blk, street, pcode]):
+            return ctx
 
         # Build the query exactly as "<blk>, <street>, <postcode>"
         query = f"{blk}, {street}, {pcode}"
@@ -51,12 +83,12 @@ class SearchStreetDirectoryStep(ValidationStep):
 
         # 1) If non‐OK status, propagate it
         if sd_result.status != SearchResponseStatus.OK:
-            ctx["validate_status"] = sd_result.status.value
+            ctx[VALIDATE_STATUS] = sd_result.status.value
             return ctx
 
         # 2) If OK but no items at all, “no match”
         if not sd_result.items:
-            ctx["validate_status"] = ValidateStatus.NO_STREETDIRECTORY_MATCH
+            ctx[VALIDATE_STATUS] = ValidateStatus.NO_STREETDIRECTORY_MATCH
             return ctx
 
         # 3) Filter out any unwanted categories
@@ -74,11 +106,11 @@ class SearchStreetDirectoryStep(ValidationStep):
 
         # 4) If nothing remains, treat as “no match”
         if not filtered_items:
-            ctx["validate_status"] = ValidateStatus.NO_STREETDIRECTORY_MATCH
+            ctx[VALIDATE_STATUS] = ValidateStatus.NO_STREETDIRECTORY_MATCH
             return ctx
 
         # 5) Otherwise save the filtered list
-        ctx["streetdirectory_results"] = filtered_items
+        ctx[STREETDIRECTORY_RESULTS_BY_FULL_ADDRESS] = filtered_items
         return ctx
 
 

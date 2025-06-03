@@ -1,8 +1,26 @@
+"""
+Command-line tool to validate addresses from a CSV file.
+
+Reads shipping addresses from a CSV, applies country-specific validation logic,
+and outputs results including parsed fields, validation status, and inferred property type.
+"""
+
 import sys
 from pathlib import Path
 
 import pandas as pd
 
+from address_validator.constants import (
+    BLOCK_NUMBER,
+    BUILDING_NAME,
+    COUNTRY_CODE_SINGAPORE,
+    PARSED_ADDRESS,
+    POSTAL_CODE,
+    STREET_NAME,
+    STREETDIRECTORY_RESULTS_BY_FULL_ADDRESS,
+    UNIT_NUMBER,
+    VALIDATE_STATUS,
+)
 from address_validator.validation import AddressValidationFlow, ValidateStatus
 
 # Configuration flags
@@ -12,17 +30,43 @@ SKIP_EMPTY = True  # Set True to skip rows with neither Shipping Street nor Ship
 
 
 class AddressCSVTester:
-    def __init__(self, input_csv: Path, country: str = "SG"):
+    """
+    A utility class to validate addresses from a CSV file.
+
+    It reads address rows, processes each through the validation pipeline,
+    collects results, and writes the annotated output to a new CSV file.
+    """
+
+    def __init__(self, input_csv: Path, country: str = COUNTRY_CODE_SINGAPORE):
+        """
+        Initialize the tester with input CSV path and country.
+
+        Args:
+            input_csv (Path): Path to the input CSV file.
+            country (str): Country code to determine validation rules.
+        """
         self.input_csv = input_csv
         self.output_csv = input_csv.with_stem(input_csv.stem + "_validated")
         self.country = country
         self.df = None
 
     def load_addresses(self):
+        """
+        Load and clean shipping addresses from the input CSV file.
+
+        Sets `self.df` with parsed DataFrame and ensures ZIPs are string-typed.
+        """
         self.df = pd.read_csv(self.input_csv, dtype={"Shipping Zip": str})
         self.df["Shipping Zip"] = self.df["Shipping Zip"].str.lstrip("'")
 
     def validate_addresses(self):
+        """
+        Run address validation logic on each row in the CSV.
+
+        Updates the DataFrame with parsed address parts, validation statuses,
+        and inferred property types. Also prints up to five examples per property type
+        where a unit number was provided.
+        """
         statuses = []
         prop_types = []
         house_nums = []
@@ -60,22 +104,22 @@ class AddressCSVTester:
             ctx = {"street": street, "city": city, "postal": shipping_zip}
             result = AddressValidationFlow.validate(raw_address, country=self.country, ctx=ctx)
 
-            parsed = result.get("parsed", {})
-            house_nums.append(parsed.get("house_number"))
-            roads.append(parsed.get("road"))
-            units.append(parsed.get("unit"))
-            postcodes.append(parsed.get("postcode"))
-            buildings.append(parsed.get("building"))
+            parsed_addr = result.get(PARSED_ADDRESS, {})
+            house_nums.append(parsed_addr.get(BLOCK_NUMBER))
+            roads.append(parsed_addr.get(STREET_NAME))
+            units.append(parsed_addr.get(UNIT_NUMBER))
+            postcodes.append(parsed_addr.get(POSTAL_CODE))
+            buildings.append(parsed_addr.get(BUILDING_NAME))
 
-            status = result.get("validate_status")
+            status = result.get(VALIDATE_STATUS)
             statuses.append(status)
-            streetdirectory_result = result.get("streetdirectory_results")
+            streetdirectory_result = result.get(STREETDIRECTORY_RESULTS_BY_FULL_ADDRESS)
             this_prop = "UNKNOWN" if streetdirectory_result is None else streetdirectory_result[0][1]
             prop_types.append(this_prop)
 
             # ─────────────────────────────────────────────────────────────────────
             # If a unit was provided, store up to 5 examples for this_prop
-            if parsed.get("unit"):
+            if parsed_addr.get(UNIT_NUMBER):
                 if this_prop not in master_examples:
                     master_examples[this_prop] = []
                 if len(master_examples[this_prop]) < 5:
@@ -90,7 +134,6 @@ class AddressCSVTester:
         self.df["Building"] = buildings
         self.df["Validation"] = statuses
         self.df["Property Type"] = prop_types
-        # self.df["Multiple Matches"] = multiple_match_addrs
 
         # ─────────────────────────────────────────────────────────────────────
         # PRINT each property type along with up to five example addresses:
@@ -107,6 +150,11 @@ class AddressCSVTester:
         # ─────────────────────────────────────────────────────────────────────
 
     def save_output(self):
+        """
+        Save the annotated DataFrame to a new CSV file.
+
+        Respects filtering flags to exclude blank rows or only include invalid ones.
+        """
         # Skip rows where both Shipping Street and Shipping Zip are empty
         if SKIP_EMPTY:
             self.df = self.df[
@@ -144,6 +192,12 @@ class AddressCSVTester:
 
 
 def main():
+    """
+    CLI entry point for running the CSV address validator.
+
+    Usage:
+        python read_from_file.py <input_csv_path>
+    """
     if len(sys.argv) != 2:
         print("❌ Usage: python read_from_file.py <path/to/input.csv>")
         sys.exit(1)

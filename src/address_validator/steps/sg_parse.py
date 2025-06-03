@@ -1,10 +1,34 @@
+"""
+Singapore-specific address parsing step.
+
+This step heuristically parses a raw Singapore address into structured components
+such as block number, street name, unit number, postal code, and building name.
+It supports common formatting patterns and tolerates messy input.
+"""
+
 import re
 
-from address_validator.constants import DEBUG_PRINT
+from address_validator.constants import (
+    BLOCK_NUMBER,
+    BUILDING_NAME,
+    DEBUG_PRINT,
+    PARSED_ADDRESS,
+    POSTAL_CODE,
+    RAW_ADDRESS,
+    STREET_NAME,
+    UNIT_NUMBER,
+)
 from address_validator.steps.base import ValidationStep
 
 
 class SingaporeAddressParseStep(ValidationStep):
+    """
+    Parse and extract structured address components from a raw Singapore address.
+
+    The parser identifies and isolates the unit number, postal code, block number,
+    street name, and building name based on various patterns observed in local formats.
+    """
+
     STREET_SUFFIXES = [
         "Street",
         "Road",
@@ -32,11 +56,17 @@ class SingaporeAddressParseStep(ValidationStep):
         "Blvd",
     ]
 
-    # ————————————————————————————————————————————————
-    # Public API
-    # ————————————————————————————————————————————————
     def __call__(self, ctx: dict) -> dict:
-        raw = ctx.get("raw_address", "")
+        """
+        Parse the raw address and store structured fields in the context.
+
+        Args:
+            ctx (dict): Context containing the RAW_ADDRESS.
+
+        Returns:
+            dict: Updated context with PARSED_ADDRESS populated.
+        """
+        raw = ctx.get(RAW_ADDRESS, "")
         # 1) Extract unit and strip it off
         unit, rem1 = self.extract_unit(raw)
         rem1 = self.normalize(rem1)
@@ -66,20 +96,32 @@ class SingaporeAddressParseStep(ValidationStep):
             print(f"➡️ Final road: {road}")
             print(f"🏢 Extracted building: {building}")
 
-        ctx["parsed"] = {
-            "house_number": house or None,
-            "road": road or None,
-            "unit": unit or None,
-            "postcode": pc or None,
-            "building": building or None,
+        ctx[PARSED_ADDRESS] = {
+            BLOCK_NUMBER: house or None,
+            STREET_NAME: road or None,
+            UNIT_NUMBER: unit or None,
+            POSTAL_CODE: pc or None,
+            BUILDING_NAME: building or None,
         }
         return ctx
 
-    # ————————————————————————————————————————————————
+    # #############################################################################################
     # Normalization and Utility Methods
-    # ————————————————————————————————————————————————
+    # #############################################################################################
+
     @staticmethod
     def normalize(text: str) -> str:
+        """
+        Normalize spacing and punctuation in the address string.
+
+        Replaces inconsistent commas, spaces, and periods for consistent tokenization.
+
+        Args:
+            text (str): Raw or intermediate address string.
+
+        Returns:
+            str: Cleaned and normalized address string.
+        """
         text = text.replace(".", " ")
         text = re.sub(r"\s*[,;]+\s*", ", ", text)
         text = re.sub(r",{2,}", ",", text)
@@ -89,11 +131,31 @@ class SingaporeAddressParseStep(ValidationStep):
         return text.strip(" ,.")
 
     def looks_like_street(self, text: str) -> bool:
+        """
+        Check if the text ends in a known street suffix (e.g., "Street", "Ave").
+
+        Args:
+            text (str): Text to check.
+
+        Returns:
+            bool: True if it appears to be a street name, False otherwise.
+        """
         return any(
             re.search(rf"\b{suffix}\b", text, re.IGNORECASE) for suffix in SingaporeAddressParseStep.STREET_SUFFIXES
         )
 
     def extract_unit(self, text: str) -> tuple[str, str]:
+        """
+        Extract a unit number from the address string, if present.
+
+        Supports formats like '16-52', '03 16', or '3/14D'.
+
+        Args:
+            text (str): Raw address string.
+
+        Returns:
+            tuple[str, str]: (Extracted unit number, remaining string after removal).
+        """
         txt = text
         unit = ""
 
@@ -120,6 +182,17 @@ class SingaporeAddressParseStep(ValidationStep):
         return "", text
 
     def extract_postcode(self, text: str) -> tuple[str, str]:
+        """
+        Extract a 6-digit Singapore postal code.
+
+        Supports formats like 'Singapore 123456', 'S123456', or plain '123456'.
+
+        Args:
+            text (str): Address string possibly containing a postal code.
+
+        Returns:
+            tuple[str, str]: (Postal code, remaining string after removal).
+        """
         patterns = [r"Singapore\s+(\d{6})", r"S(\d{6})", r"\b(\d{6})\b"]
         for pat in patterns:
             m = re.search(pat, text, re.IGNORECASE)
@@ -129,22 +202,17 @@ class SingaporeAddressParseStep(ValidationStep):
                 return pc, remainder
         return "", text
 
-    # ————————————————————————————————————————————————
-    # High‐level “split house & road” orchestration
-    # ————————————————————————————————————————————————
     def extract_house_and_road(self, text: str) -> tuple[str, str]:
         """
-        Try each pattern in order (0 → 8). Return the first non‐None match:
-           0) Two parts exactly, second purely digits(+letter).
-           1) “Blk/Block <num> <road>” in one segment
-           2) Comma‐separated “Blk/Block <num>” anywhere
-           3) Inline “<road> Blk <num>”
-           4) Building-first pattern (“[Building, BlockNumber, Road]”)
-           5) Apt-prefix at start (“Apt <num> …”)
-           6) Numeric prefix in first part (“<num> <text>”)
-           7) Any segment that looks like a street (“… Street”, “… Road”, etc.)
-           8) Fallback: any segment containing a digit
-        If none match, return ("", "").
+        Attempt to split the string into a block/house number and a road/street name.
+
+        Applies multiple heuristics and pattern-matching strategies to handle various layouts.
+
+        Args:
+            text (str): Address string after unit and postal code removal.
+
+        Returns:
+            tuple[str, str]: (Block number, Street name).
         """
         txt = self.normalize(text)
         parts = [p.strip() for p in txt.split(",") if p.strip()]
@@ -197,29 +265,53 @@ class SingaporeAddressParseStep(ValidationStep):
         # Nothing matched
         return "", ""
 
-    # ————————————————————————————————————————————————
-    # Pattern‐0: Two parts exactly, second purely digits(+letter)
-    # ————————————————————————————————————————————————
     def _match_two_part_numeric(self, parts: list[str]) -> tuple[str, str] | None:
+        """
+        Match pattern where the address has two parts and the second is numeric.
+
+        Example: ["Jurong East Street", "288A"] → ("288A", "Jurong East Street")
+
+        Args:
+            parts (list[str]): Comma-separated address segments.
+
+        Returns:
+            tuple[str, str] | None: (House, Road) if matched, else None.
+        """
         if len(parts) == 2:
             if re.fullmatch(r"\d+[A-Za-z]?", parts[1], re.IGNORECASE):
                 return parts[1], parts[0]
         return None
 
-    # ————————————————————————————————————————————————
-    # Pattern‐1: “Blk/Block <num> <road>” in a single comma‐segment
-    # ————————————————————————————————————————————————
     def _match_blk_prefix_single(self, parts: list[str]) -> tuple[str, str] | None:
+        """
+        Match pattern with 'Blk' or 'Block' followed by a number in a single segment.
+
+        Example: "Blk 288A Jurong East Street 21" → ("288A", "Jurong East Street 21")
+
+        Args:
+            parts (list[str]): List of comma-separated address segments.
+
+        Returns:
+            tuple[str, str] | None: (House, Road) if matched, else None.
+        """
         for part in parts:
             m1 = re.match(r"^(?:Blk|Block)\s*(\d+[A-Za-z]?)[,\s]+(.+)$", part, re.IGNORECASE)
             if m1:
                 return m1.group(1), m1.group(2)
         return None
 
-    # ————————————————————————————————————————————————
-    # Pattern‐2: Comma‐separated “Blk <num>” anywhere in the list
-    # ————————————————————————————————————————————————
     def _match_blk_prefix_comma(self, parts: list[str]) -> tuple[str, str] | None:
+        """
+        Match pattern with 'Blk' or 'Block' in one segment and street in others.
+
+        Example: ["Blk 113A", "Yishun Ring Road"] → ("113A", "Yishun Ring Road")
+
+        Args:
+            parts (list[str]): List of comma-separated segments.
+
+        Returns:
+            tuple[str, str] | None: (House, Road) if matched, else None.
+        """
         for i, part in enumerate(parts):
             m2 = re.match(r"\b(?:Blk|Block)\s*(\d+[A-Za-z]?)\b", part, re.IGNORECASE)
             if m2:
@@ -228,23 +320,39 @@ class SingaporeAddressParseStep(ValidationStep):
                 return house, road
         return None
 
-    # ————————————————————————————————————————————————
-    # Pattern‐3: Inline “<road> Blk <num>” in the same segment
-    # ————————————————————————————————————————————————
     def _match_inline_blk(self, txt: str) -> tuple[str, str] | None:
+        """
+        Match pattern where block number follows street in the same line.
+
+        Example: "Jurong East Street 21 Blk 288A" → ("288A", "Jurong East Street 21")
+
+        Args:
+            txt (str): Full address text.
+
+        Returns:
+            tuple[str, str] | None: (House, Road) if matched, else None.
+        """
         inline = re.match(
             r"^(?P<road>.+?)\s+\b(?:Blk|Block)\s*(?P<num>\d+[A-Za-z]?)\b",
             txt,
             re.IGNORECASE,
         )
         if inline:
-            return inline.group("num"), inline.group("road").strip()
+            return inline.group("num"), inline.group(STREET_NAME).strip()
         return None
 
-    # ————————————————————————————————————————————————
-    # Pattern‐4: Building‐first pattern: [ Building, BlockNumber, Road ]
-    # ————————————————————————————————————————————————
     def _match_building_first(self, parts: list[str]) -> tuple[str, str] | None:
+        """
+        Match pattern where a building name appears before block and road.
+
+        Example: ["Pinevale", "123", "Tampines Street 73"] → ("123", "Tampines Street 73")
+
+        Args:
+            parts (list[str]): Comma-separated segments.
+
+        Returns:
+            tuple[str, str] | None: (House, Road) if matched, else None.
+        """
         if (
             len(parts) >= 3
             and not parts[0][0].isdigit()
@@ -254,10 +362,18 @@ class SingaporeAddressParseStep(ValidationStep):
             return parts[1], parts[2]
         return None
 
-    # ————————————————————————————————————————————————
-    # Pattern‐5: Apt‐prefix (“Apt <num> …”)
-    # ————————————————————————————————————————————————
     def _match_apt_prefix(self, txt: str) -> tuple[str, str] | None:
+        """
+        Match pattern with 'Apt' or 'Apartment' prefix.
+
+        Example: "Apt 101 Pinevale, Tampines" → ("101", "Pinevale, Tampines")
+
+        Args:
+            txt (str): Full address text.
+
+        Returns:
+            tuple[str, str] | None: (House, Road) if matched, else None.
+        """
         apt = re.match(
             r"\b(?:Apt|Apartment)\s*(\d+[A-Za-z]?)(?:\s+(.*))?",
             txt,
@@ -267,10 +383,18 @@ class SingaporeAddressParseStep(ValidationStep):
             return apt.group(1), apt.group(2) or ""
         return None
 
-    # ————————————————————————————————————————————————
-    # Pattern‐6: Numeric prefix in the first comma‐segment
-    # ————————————————————————————————————————————————
     def _match_numeric_prefix(self, parts: list[str]) -> tuple[str, str] | None:
+        """
+        Match pattern where first segment starts with a number.
+
+        Example: ["288A Jurong East", "Singapore 600288"] → ("288A", "Jurong East")
+
+        Args:
+            parts (list[str]): Comma-separated address segments.
+
+        Returns:
+            tuple[str, str] | None: (House, Road) if matched, else None.
+        """
         if parts:
             m6 = re.match(r"^(\d+[A-Za-z]?)(?:\s+(.*))?$", parts[0])
             if m6:
@@ -281,6 +405,17 @@ class SingaporeAddressParseStep(ValidationStep):
     # Pattern‐7: Any “street-like” segment (suffix in STREET_SUFFIXES)
     # ————————————————————————————————————————————————
     def _match_any_street_like(self, parts: list[str]) -> tuple[str, str] | None:
+        """
+        Match any segment that contains a known street suffix.
+
+        If it starts with a number, extract it as house; otherwise return road only.
+
+        Args:
+            parts (list[str]): Comma-separated segments.
+
+        Returns:
+            tuple[str, str] | None: (House, Road) if matched, else None.
+        """
         for part in parts:
             if self.looks_like_street(part):
                 # If there’s a leading number + space + rest, grab that
@@ -291,22 +426,40 @@ class SingaporeAddressParseStep(ValidationStep):
                 return "", part
         return None
 
-    # ————————————————————————————————————————————————
-    # Pattern‐8: Fallback—any segment containing a digit
-    # ————————————————————————————————————————————————
     def _match_any_digit(self, parts: list[str]) -> tuple[str, str] | None:
+        """
+        Fallback pattern: pick the first segment that contains a digit.
+
+        Used when no better pattern matches.
+
+        Args:
+            parts (list[str]): Comma-separated segments.
+
+        Returns:
+            tuple[str, str] | None: (Empty house, Road) if matched, else None.
+        """
         for part in parts:
             if re.search(r"\d", part):
                 return "", part
         return None
 
-    # ————————————————————————————————————————————————
-    # Extract “building” from the leftover text
-    # ————————————————————————————————————————————————
     def extract_building(self, remainder: str, house: str, road: str) -> str:
+        """
+        Extract building name from the remaining text.
+
+        Excludes parts that match the known house number, road, or look like street names.
+
+        Args:
+            remainder (str): Remaining string after extracting house and road.
+            house (str): Block number.
+            road (str): Street name.
+
+        Returns:
+            str: The inferred building name, or empty string if none.
+        """
         rem = self.normalize(remainder)
         parts = [p.strip() for p in rem.split(",") if p.strip()]
-        candidates = []
+        candidates: list = []
         for p in parts:
             if house and re.search(rf"\b{re.escape(house)}\b", p):
                 continue
@@ -320,5 +473,4 @@ class SingaporeAddressParseStep(ValidationStep):
         return candidates[0] if candidates else ""
 
 
-# Single instance you can import elsewhere:
 sg_parse_step = SingaporeAddressParseStep()

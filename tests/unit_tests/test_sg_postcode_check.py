@@ -1,32 +1,35 @@
-# tests/unit_tests/test_sg_check_postal_format.py
+"""
+Unit tests for SGCheckPostalFormatStep.
+
+This step checks if the parsed postal code is present and correctly formatted
+as a six-digit number. If not, it sets VALIDATE_STATUS to INVALID_POSTAL_CODE.
+"""
 
 import pytest
 
+from address_validator.constants import PARSED_ADDRESS, POSTAL_CODE, VALIDATE_STATUS
 from address_validator.steps.sg_postcode_check import SGCheckPostalFormatStep
 from address_validator.validation import ValidateStatus
 
 
 @pytest.fixture
 def step():
+    """Returns a shared SGCheckPostalFormatStep instance."""
     return SGCheckPostalFormatStep()
 
 
 def test_missing_postcode(step):
-    """
-    If 'parsed' has no 'postcode' key (or it's None), we should get POSTAL_CODE_MISSING.
-    """
-    ctx = {"parsed": {}}
+    """Should flag INVALID_POSTAL_CODE if postcode key is missing or None."""
+    ctx = {PARSED_ADDRESS: {}}
     updated = step(ctx.copy())
-    assert updated["validate_status"] == ValidateStatus.POSTAL_CODE_MISSING
+    assert updated[VALIDATE_STATUS] == ValidateStatus.INVALID_POSTAL_CODE
 
 
 def test_empty_postcode(step):
-    """
-    If 'parsed' contains an empty string for 'postcode', that also counts as missing.
-    """
-    ctx = {"parsed": {"postcode": ""}}
+    """Should flag INVALID_POSTAL_CODE if postcode is an empty string."""
+    ctx = {PARSED_ADDRESS: {POSTAL_CODE: ""}}
     updated = step(ctx.copy())
-    assert updated["validate_status"] == ValidateStatus.POSTAL_CODE_MISSING
+    assert updated[VALIDATE_STATUS] == ValidateStatus.INVALID_POSTAL_CODE
 
 
 @pytest.mark.parametrize(
@@ -39,19 +42,15 @@ def test_empty_postcode(step):
     ],
 )
 def test_invalid_postcode_format(step, bad_postal):
-    """
-    Any postcode that is not exactly 6 digits should yield INVALID_POSTAL_CODE.
-    """
-    ctx = {"parsed": {"postcode": bad_postal}}
+    """Should flag INVALID_POSTAL_CODE for non-6-digit or non-numeric values."""
+    ctx = {PARSED_ADDRESS: {POSTAL_CODE: bad_postal}}
     updated = step(ctx.copy())
-    assert updated["validate_status"] == ValidateStatus.INVALID_POSTAL_CODE
+    assert updated[VALIDATE_STATUS] == ValidateStatus.INVALID_POSTAL_CODE
 
 
 def test_valid_postcode(step):
-    """
-    A well‐formed, six‐digit numeric postcode should NOT set any validate_status.
-    """
-    ctx = {"parsed": {"postcode": "123456"}}
+    """Should not set validate_status for valid six-digit postcode."""
+    ctx = {PARSED_ADDRESS: {POSTAL_CODE: "123456"}}
     updated = step(ctx.copy())
     # For a valid postcode, the step returns the ctx unchanged (no validate_status key)
-    assert "validate_status" not in updated
+    assert VALIDATE_STATUS not in updated

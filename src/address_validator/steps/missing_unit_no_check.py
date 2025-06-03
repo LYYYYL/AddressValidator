@@ -1,57 +1,65 @@
-# src/address_validator/steps/missing_unit_no_check_step.py
+"""
+Validation step to check for missing unit numbers.
+
+This step uses property type information (from StreetDirectory) to determine
+if a unit number is required. If the property type indicates that a unit number
+is needed and none is found in the parsed address, the context's `VALIDATE_STATUS`
+is set to `UNIT_NUMBER_MISSING`.
+"""
 
 from address_validator.constants import (
+    PARSED_ADDRESS,
     PROPERTY_TYPES_NOT_REQUIRING_UNIT,
     PROPERTY_TYPES_REQUIRING_UNIT,
+    UNIT_NUMBER,
     USE_UNIT_REQUIREMENT_WHITELIST,
+    VALIDATE_STATUS,
 )
 from address_validator.steps.base import ValidationStep
+from address_validator.utils.common import extract_property_types
 from address_validator.validation import ValidateStatus
 
 
 class MissingUnitNoCheck(ValidationStep):
     """
-    Verify that if property types from streetdirectory_results require a unit number,
-    that the parsed unit exists.
+    Checks if a unit number is missing when the property type requires it.
 
-    - If USE_UNIT_REQUIREMENT_WHITELIST is True:
-        Only types in PROPERTY_TYPES_REQUIRING_UNIT will require a unit.
-    - If False:
-        Any type NOT in PROPERTY_TYPES_NOT_REQUIRING_UNIT will require a unit.
-
-    (We assume any “Business dealing with …” substrings were already removed upstream.)
+    This step looks at property type(s) extracted from StreetDirectory results,
+    and depending on the configuration, determines whether the absence of a unit
+    number should be flagged as a validation issue.
     """
 
     def __call__(self, ctx: dict) -> dict:
-        sd_results = ctx.get("streetdirectory_results") or []
-        if not sd_results:
-            return ctx  # No StreetDirectory data; nothing to check
+        """
+        Determine if a unit number is required but missing.
 
-        # Extract raw property types (already filtered)
-        property_types_raw = [ptype for _, ptype in sd_results]
+        Uses whitelist or blacklist mode to decide which property types require a unit.
+        If missing and required, sets `VALIDATE_STATUS` to `UNIT_NUMBER_MISSING`.
 
-        # Remove duplicates while preserving insertion order
-        property_types = list(dict.fromkeys(property_types_raw))
+        Args:
+            ctx (dict): Address validation context with parsed address and property type.
 
-        # Decide if a unit is needed
+        Returns:
+            dict: Updated context, with validation status set if applicable.
+        """
+        property_types = extract_property_types(ctx)
+
+        if not property_types:
+            return ctx  # No valid SD property types
+
         if USE_UNIT_REQUIREMENT_WHITELIST:
-            # Only those in the whitelist require a unit
             needs_unit = any(pt in PROPERTY_TYPES_REQUIRING_UNIT for pt in property_types)
         else:
-            # Any type not in the blacklist requires a unit
             needs_unit = any(pt not in PROPERTY_TYPES_NOT_REQUIRING_UNIT for pt in property_types)
 
-        parsed_unit = ctx.get("parsed", {}).get("unit")
+        parsed_unit = ctx.get(PARSED_ADDRESS, {}).get(UNIT_NUMBER)
 
-        # If a unit was provided, record the property type that needed it
-        if parsed_unit and property_types:
-            if "proptypes_with_unit_no" not in ctx:
-                ctx["proptypes_with_unit_no"] = set()
-            ctx["proptypes_with_unit_no"].add(property_types[0])
+        # todo: for data collection purpose, remove this
+        if parsed_unit:
+            ctx.setdefault("proptypes_with_unit_no", set()).add(property_types[0])
 
-        # If a unit is required but missing, set failure
         if needs_unit and not parsed_unit:
-            ctx["validate_status"] = ValidateStatus.UNIT_NUMBER_MISSING
+            ctx[VALIDATE_STATUS] = ValidateStatus.UNIT_NUMBER_MISSING
 
         return ctx
 

@@ -1,17 +1,16 @@
 """pytest configuration file."""
 
+import os
 import sys
 from pathlib import Path
 
-THIS_DIR = Path(__file__).parent
-TESTS_DIR_PARENT = (THIS_DIR / "..").resolve()
+TESTS_DIR_PARENT = Path(__file__).parent.parent.resolve()
 
-sys.path.insert(0, str(TESTS_DIR_PARENT))
+sys.path.insert(0, str(TESTS_DIR_PARENT / "src"))
+sys.path.insert(0, str(TESTS_DIR_PARENT / "app"))
 
 pytest_plugins = ["tests.fixtures.example_fixture"]
 
-
-import os
 
 # MUST be set before any `postal` import happens
 os.environ["LIBPOSTAL_DATA_DIR"] = "/home/anonymous/libpostal-lib/libpostal/"

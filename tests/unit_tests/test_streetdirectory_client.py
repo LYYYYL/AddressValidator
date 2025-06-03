@@ -1,4 +1,9 @@
-import datetime
+"""
+Tests for StreetDirectoryClient, parser, and search result behavior.
+
+Covers HTML parsing, result factory logic, and optional real-time HTTP search.
+"""
+
 import textwrap
 
 import pytest
@@ -10,15 +15,16 @@ from address_validator.streetdirectory_client import (
     StreetDirectoryClient,
     StreetDirectorySearchResult,
 )
+from address_validator.utils.common import current_utc_isoformat
 
-# -----------------------------------------------------------------------------
-# Fixtures: Sample HTML snippets (same as before but now used by the new parser)
-# -----------------------------------------------------------------------------
+###################################################################################################
+# Fixtures: Sample HTML snippets
+###################################################################################################
 
 
 @pytest.fixture
 def sample_html_minimal():
-    """Minimal snippet with two results for parsing‐and‐factory tests."""
+    """Minimal HTML with two results for parsing tests."""
     return textwrap.dedent(
         """
     <div class="main_view_result arial">
@@ -48,7 +54,7 @@ def sample_html_minimal():
 
 @pytest.fixture
 def sample_html_one():
-    """A real-world snippet with exactly one HDB block (bold tag around the address)."""
+    """One-entry HDB listing (real-world)."""
     return """
 <div class="main_view_result arial" align="left">
   <div style="display: inline-block; margin: 10px 0 10px 0;">
@@ -82,7 +88,7 @@ def sample_html_one():
 
 @pytest.fixture
 def sample_html_many():
-    """A real-page snippet with ten entries—five HDB blocks, one MSCP, and four business listings."""
+    """Ten-entry mixed HDB, MSCP, and business listings."""
     return """
 <div class="main_view_result arial" align="left">
     <div style="display: inline-block; margin: 10px 0 10px 0;">
@@ -178,6 +184,7 @@ def sample_html_many():
 
 
 def test_parse_minimal(sample_html_minimal):
+    """Parses two minimal entries correctly."""
     client = StreetDirectoryClient()
     # Bypass HTTP entirely by calling the parser directly:
     results = client._parse_html(sample_html_minimal, limit=None)
@@ -189,6 +196,7 @@ def test_parse_minimal(sample_html_minimal):
 
 
 def test_parse_one(sample_html_one):
+    """Parses exactly one HDB listing from single block."""
     client = StreetDirectoryClient()
     results = client._parse_html(sample_html_one, limit=None)
 
@@ -197,6 +205,7 @@ def test_parse_one(sample_html_one):
 
 
 def test_parse_many(sample_html_many):
+    """Parses 10 expected entries from full sample HTML."""
     client = StreetDirectoryClient()
     results = client._parse_html(sample_html_many, limit=None)
 
@@ -228,20 +237,19 @@ def test_parse_many(sample_html_many):
     assert results == expected
 
 
-# -----------------------------------------------------------------------------
+###################################################################################################
 # 2. Result‐factory tests: ensure from_parsed(...) behaves correctly
-# -----------------------------------------------------------------------------
+###################################################################################################
 
 
 def test_from_parsed_with_none_or_empty():
-    """If parsed is None or [] but status is OK, it should become NOT_FOUND."""
-    now_before = datetime.datetime.now(tz=datetime.timezone.utc)
+    """Wraps OK + empty into NOT_FOUND; retains non-OK status."""
+    now_before = current_utc_isoformat()
     res_none = StreetDirectorySearchResult.from_parsed("any", None, SearchResponseStatus.OK)
     assert res_none.raw_query == "any"
     assert res_none.items == []
     assert res_none.status == SearchResponseStatus.NOT_FOUND
-    assert isinstance(res_none.fetched_at, datetime.datetime)
-    assert res_none.fetched_at >= now_before
+    assert res_none.timestamp >= now_before
 
     res_empty = StreetDirectorySearchResult.from_parsed("any", [], SearchResponseStatus.OK)
     assert res_empty.raw_query == "any"
@@ -256,40 +264,39 @@ def test_from_parsed_with_none_or_empty():
 
 
 def test_from_parsed_with_nonempty_list(sample_html_minimal):
-    """If parsed list is nonempty and status is OK, status remains OK."""
-    # Reuse the minimal HTML fixture to generate a parsed list
+    """Wraps parsed list into OK result."""
+    # Reuse the minimal HTML fixture to generate a parsed_addr list
     client = StreetDirectoryClient()
-    parsed = client._parse_html(sample_html_minimal, limit=None)
-    assert parsed  # should be nonempty
+    parsed_addr = client._parse_html(sample_html_minimal, limit=None)
+    assert parsed_addr  # should be nonempty
 
-    res = StreetDirectorySearchResult.from_parsed("ignored", parsed, SearchResponseStatus.OK)
+    res = StreetDirectorySearchResult.from_parsed("ignored", parsed_addr, SearchResponseStatus.OK)
     assert res.raw_query == "ignored"
-    assert res.items == parsed
+    assert res.items == parsed_addr
     assert res.status == SearchResponseStatus.OK
-    assert isinstance(res.fetched_at, datetime.datetime)
 
 
-# -----------------------------------------------------------------------------
+###################################################################################################
 # 3. “Factory” tests (HTTP calls) with monkeypatching
-# -----------------------------------------------------------------------------
+###################################################################################################
 
 
 class DummyResponse:
+    """A mock HTTP response object for testing StreetDirectoryApiClient."""
+
     def __init__(self, text, status_code=200):
+        """Initialize the mock response with text content and a status code."""
         self.text = text
         self.status_code = status_code
 
     def raise_for_status(self):
+        """Raise HTTPError if status code is 400 or higher."""
         if self.status_code >= 400:
             raise requests.HTTPError(f"HTTP {self.status_code}")
 
 
 def test_search_factory_minimal(monkeypatch, sample_html_minimal):
-    """
-    If fetch_html(...) returns (minimal HTML, OK), then
-    client.search(...) should wrap that into a StreetDirectorySearchResult
-    with exactly two items.
-    """
+    """Mocks HTTP and parses two entries."""
 
     def fake_fetch(self, address, country, state):
         return (sample_html_minimal, SearchResponseStatus.OK)
@@ -304,13 +311,10 @@ def test_search_factory_minimal(monkeypatch, sample_html_minimal):
     assert result.raw_query == "ignored"
     assert result.items == [("A1 Road", "CatA"), ("B2 Avenue", "CatB")]
     assert result.status == SearchResponseStatus.OK
-    assert isinstance(result.fetched_at, datetime.datetime)
 
 
 def test_search_factory_no_matches(monkeypatch):
-    """
-    If fetch_html returns ("<empty page>", OK), parsed is [], so status → NOT_FOUND.
-    """
+    """Empty HTML returns NOT_FOUND."""
 
     def fake_fetch(self, address, country, state):
         # Minimal wrapper that returns HTML with no <div class="category_row">
@@ -324,7 +328,6 @@ def test_search_factory_no_matches(monkeypatch):
     assert result.raw_query == "anything"
     assert result.items == []  # no items parsed
     assert result.status == SearchResponseStatus.NOT_FOUND
-    assert isinstance(result.fetched_at, datetime.datetime)
 
 
 @pytest.mark.parametrize(
@@ -337,9 +340,7 @@ def test_search_factory_no_matches(monkeypatch):
     ],
 )
 def test_search_factory_non_ok(fetch_return, expected_status, monkeypatch):
-    """
-    If fetch_html(...) returns (None, some_non_OK_status), then search → that status, empty items.
-    """
+    """Client wraps non-OK status with empty items."""
 
     def fake_fetch(self, address, country, state):
         return fetch_return
@@ -352,19 +353,16 @@ def test_search_factory_non_ok(fetch_return, expected_status, monkeypatch):
     assert result.raw_query == "whatever"
     assert result.items == []  # no parse step at all
     assert result.status == expected_status
-    assert isinstance(result.fetched_at, datetime.datetime)
 
 
-# -----------------------------------------------------------------------------
+###################################################################################################
 # 4. “Real‐request” tests (live HTTP) marked as slow
-# -----------------------------------------------------------------------------
+###################################################################################################
 
 
 @pytest.mark.slow
 def test_real_search_one():
-    """
-    Live‐site check: “288E Jurong East Street 21” should return exactly one HDB block.
-    """
+    """Live test for known HDB block — should return one match."""
     client = StreetDirectoryClient()
     result = client.search(address="288E Jurong East Street 21", country="singapore", state=0, limit=None)
     # Verify the search operation was successful
@@ -380,10 +378,7 @@ def test_real_search_one():
 
 @pytest.mark.slow
 def test_real_search_many():
-    """
-    Live‐site check: “288 Jurong East Street 21” should return exactly the full set of 10 entries.
-    We assert against the complete expected list below.
-    """
+    """Live test for full result set with 10 known matches."""
     client = StreetDirectoryClient()
     result = client.search("288 Jurong East Street 21", country="singapore", state=0, limit=None)
 
@@ -406,7 +401,10 @@ def test_real_search_many():
         ),
         (
             "HDB Jurong East, 288C Jurong East Street 21 (S) 603288",
-            "Business dealing with Building Construction , Building Construction Contractor , Kitchen Remodeling , etc",
+            (
+                "Business dealing with Building Construction , Building Construction Contractor , "
+                "Kitchen Remodeling , etc"
+            ),
         ),
         (
             "HDB Jurong East, 288A Jurong East Street 21 (S) 601288",

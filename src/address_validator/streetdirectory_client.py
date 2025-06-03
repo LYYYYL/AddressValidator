@@ -1,11 +1,11 @@
 """
-This class queries streetdirectory.com for an address and scrapes the result using BeautifulSoup.
-streetdirectory.com does not have a working resultAPI at the time of this implementation, so scraping is
-used. Returns the property type that is used to determine whether a unit number is required for an address:
-E.g. HDB, condo.
+StreetDirectory scraping client for property-type classification.
+
+Since streetdirectory.com does not offer a working address result API, this module
+uses HTML scraping via BeautifulSoup to extract the category (e.g., HDB, Condo, School)
+for a given address. Categories are used to infer whether unit numbers are required.
 """
 
-import datetime
 from dataclasses import dataclass
 from typing import Optional
 
@@ -19,38 +19,55 @@ from tenacity import (
     wait_exponential,
 )
 
-from address_validator.search import SearchResponseStatus
+from address_validator.search import SearchResponseStatus, SearchResult
+from address_validator.utils.common import current_utc_isoformat
 
 
 @dataclass
-class StreetDirectorySearchResult:
-    raw_query: str
+class StreetDirectorySearchResult(SearchResult):
+    """
+    A search result returned by the StreetDirectory scraping client.
+
+    Attributes:
+        items (list): A list of (address, category) tuples.
+    """
+
     items: list[tuple[str | None, str]]  # List of (address, category)
-    status: SearchResponseStatus
-    fetched_at: datetime.datetime
 
     @classmethod
     def from_parsed(
-        cls, raw_query: str, parsed: list[tuple[Optional[str], str]] | None, status: SearchResponseStatus
+        cls, raw_query: str, parsed_addr: list[tuple[str | None, str]] | None, status: SearchResponseStatus
     ) -> "StreetDirectorySearchResult":
         """
-        Factory that normalizes parsed output into a consistent object.
-        - If parsed is None or empty and status is OK, we treat it as NOT_FOUND.
-        - If parsed is a nonempty list, status remains OK.
-        - If status passed in is already NOT_FOUND / ERROR / RATE_LIMITED, we wrap accordingly.
-        """
-        now = datetime.datetime.now(tz=datetime.timezone.utc)
-        if status == SearchResponseStatus.OK:
-            # If the API said “OK” but parsing returned no items, treat as NOT_FOUND.
-            if not parsed:
-                return cls(raw_query, [], SearchResponseStatus.NOT_FOUND, now)
-            return cls(raw_query, parsed, SearchResponseStatus.OK, now)
+        Build a result object from parsed items and a given status.
 
-        # Any other status—just wrap an empty list.
-        return cls(raw_query, [], status, now)
+        Args:
+            raw_query (str): The original query string.
+            parsed_addr (list | None): Parsed (address, category) pairs.
+            status (SearchResponseStatus): The status of the fetch.
+
+        Returns:
+            StreetDirectorySearchResult: A structured result object.
+        """
+        now = current_utc_isoformat()
+        if status == SearchResponseStatus.OK and parsed_addr:
+            return cls(
+                raw_query=raw_query,
+                status=SearchResponseStatus.OK,
+                timestamp=now,
+                items=parsed_addr,
+            )
+        return cls(
+            raw_query=raw_query,
+            status=SearchResponseStatus.NOT_FOUND if status == SearchResponseStatus.OK else status,
+            timestamp=now,
+            items=[],
+        )
 
 
 class StreetDirectoryApiClient:
+    """Handles low-level HTTP requests to streetdirectory.com with retry logic."""
+
     BASE_URL = "https://www.streetdirectory.com/asia_travel/search/"
     HEADERS = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -62,7 +79,13 @@ class StreetDirectoryApiClient:
     @staticmethod
     def _should_retry(result: tuple[Optional[str], SearchResponseStatus]) -> bool:
         """
-        Retry whenever we get back a (None, RATE_LIMITED) or (None, ERROR).
+        Decide whether to retry based on the result status.
+
+        Args:
+            result (tuple): A (response_text, status) tuple.
+
+        Returns:
+            bool: True if retry should occur, else False.
         """
         _, status = result
         return status in {SearchResponseStatus.RATE_LIMITED, SearchResponseStatus.ERROR}
@@ -79,10 +102,15 @@ class StreetDirectoryApiClient:
     )
     def fetch_html(self, address: str, country: str, state: int) -> tuple[str | None, SearchResponseStatus]:
         """
-        Perform the HTTP GET to StreetDirectory. If we hit a timeout/connection error/429/5xx,
-        return (None, appropriate_status) so that tenacity can decide whether to retry.
-        On success (status_code 200–299), return (html_text, OK).
-        On 400–499 (excluding 429), treat as ERROR (no retry).
+        Send a GET request to StreetDirectory and return raw HTML on success.
+
+        Args:
+            address (str): The address to search.
+            country (str): Country name (e.g., 'singapore').
+            state (int): State ID (usually 0).
+
+        Returns:
+            tuple: (HTML string or None, SearchResponseStatus)
         """
         params = {"q": address, "country": country, "state": state}
         try:
@@ -114,7 +142,8 @@ class StreetDirectoryApiClient:
 
 
 class StreetDirectoryClient:
-    # ─── Private class constants ─────────────────────────────────────────────
+    """High-level client to scrape and extract property categories from StreetDirectory."""
+
     _CATEGORY_SELECTOR = "div.main_view_result div.category_row"
     _ADDRESS_CONTAINER_CLASS = "search_list"
     _FIELD_LABEL_CLASS = "search_label"
@@ -130,8 +159,14 @@ class StreetDirectoryClient:
 
     def _parse_html(self, html: str, limit: int | None = 1) -> list[tuple[str | None, str]]:
         """
-        Given raw StreetDirectory HTML, return up to `limit` (address, category) pairs.
-        Using the “private” class constants above so they never escape this class.
+        Parse raw HTML and extract (address, category) results.
+
+        Args:
+            html (str): Raw HTML returned from StreetDirectory.
+            limit (int | None): Max number of results to return.
+
+        Returns:
+            list: List of (address, category) pairs.
         """
         soup = BeautifulSoup(html, "html.parser")
         results: list[tuple[Optional[str], str]] = []
@@ -162,6 +197,18 @@ class StreetDirectoryClient:
         state: int = 0,
         limit: int | None = 1,
     ) -> StreetDirectorySearchResult:
+        """
+        Perform a search query and return structured result with property category.
+
+        Args:
+            address (str): The full address string to search.
+            country (str): Country to include in the query.
+            state (int): Optional state ID.
+            limit (int | None): Max number of result pairs to return.
+
+        Returns:
+            StreetDirectorySearchResult: Structured result with categories.
+        """
         raw_html, status = self.api.fetch_html(address, country, state)
 
         if status != SearchResponseStatus.OK or raw_html is None:

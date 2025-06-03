@@ -1,9 +1,24 @@
-# tests/unit_tests/test_sg_parse.py
+"""
+Unit tests for SingaporeAddressParseStep.
 
-import re
+Covers:
+- Normalization of input
+- Extraction of unit number, postal code, block/street
+- Building name detection
+- Full address parsing workflow
+"""
 
 import pytest
 
+from address_validator.constants import (
+    BLOCK_NUMBER,
+    BUILDING_NAME,
+    PARSED_ADDRESS,
+    POSTAL_CODE,
+    RAW_ADDRESS,
+    STREET_NAME,
+    UNIT_NUMBER,
+)
 from address_validator.steps.sg_parse import SingaporeAddressParseStep
 
 
@@ -12,6 +27,7 @@ from address_validator.steps.sg_parse import SingaporeAddressParseStep
 #
 @pytest.fixture(scope="module")
 def parser():
+    """Returns a shared SingaporeAddressParseStep instance."""
     return SingaporeAddressParseStep()
 
 
@@ -31,13 +47,14 @@ def parser():
     ],
 )
 def test_normalize_reduces_punctuation_and_whitespace(parser, input_text, expected):
+    """Should reduce punctuation and whitespace to clean, collapsed format."""
     out = parser.normalize(input_text)
     assert out == expected
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+###################################################################################################
 # 2) Tests for extract_unit(text) → various “unit” patterns
-# ──────────────────────────────────────────────────────────────────────────────
+###################################################################################################
 @pytest.mark.parametrize(
     "txt, expected_unit, expected_rem",
     [
@@ -56,6 +73,7 @@ def test_normalize_reduces_punctuation_and_whitespace(parser, input_text, expect
     ],
 )
 def test_extract_unit_various_patterns(parser, txt, expected_unit, expected_rem):
+    """Should extract unit numbers from various formats and return remainder."""
     unit, remainder = parser.extract_unit(txt)
     assert unit == expected_unit
 
@@ -66,9 +84,9 @@ def test_extract_unit_various_patterns(parser, txt, expected_unit, expected_rem)
     assert normalized_rem == expected_rem
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+###################################################################################################
 # 3) Tests for extract_postcode(text) → various postcode patterns
-# ──────────────────────────────────────────────────────────────────────────────
+###################################################################################################
 @pytest.mark.parametrize(
     "txt, expected_pc, expected_rem",
     [
@@ -87,6 +105,7 @@ def test_extract_unit_various_patterns(parser, txt, expected_unit, expected_rem)
     ],
 )
 def test_extract_postcode_patterns(parser, txt, expected_pc, expected_rem):
+    """Should extract 6-digit postal codes and return cleaned remainder."""
     pc, remainder = parser.extract_postcode(txt)
     assert pc == expected_pc
 
@@ -95,9 +114,9 @@ def test_extract_postcode_patterns(parser, txt, expected_pc, expected_rem):
     assert normalized_rem == expected_rem
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+###################################################################################################
 # 4) Tests for extract_house_and_road(text) → all eight patterns (0→8)
-# ──────────────────────────────────────────────────────────────────────────────
+###################################################################################################
 @pytest.mark.parametrize(
     "txt, expected",
     [
@@ -131,20 +150,20 @@ def test_extract_postcode_patterns(parser, txt, expected_pc, expected_rem):
     ],
 )
 def test_extract_house_and_road_all_patterns(parser, txt, expected):
+    """Should match and extract house/block and street from all pattern types."""
     house, road = parser.extract_house_and_road(txt)
     assert (house, road) == expected
 
 
 def test_extract_house_and_road_two_non_numeric_parts(parser):
-    # Two comma‐parts but second "Dover" is not purely digits/letter → no pattern0 match.
-    # Then none of 1→7 match, so fallback sees no digit → ("", "").
+    """Should return empty strings when no pattern matches and no digits exist."""
     house, road = parser.extract_house_and_road("Hello, Dover")
     assert house == ""
     assert road == ""
 
 
 def test_no_numeric_and_no_street_like(parser):
-    # No digits and no street suffix → should return ("", "")
+    """Should return empty strings if no digits or street suffixes are found."""
     house, road = parser.extract_house_and_road("UpperMountRoadNoDigits")
     assert (house, road) == ("", "")
 
@@ -169,47 +188,79 @@ def test_no_numeric_and_no_street_like(parser):
     ],
 )
 def test_extract_building(parser, remainder, house, road, expected_building):
+    """Should extract building name, ignoring redundant or known parts."""
     building = parser.extract_building(remainder, house, road)
     assert building == expected_building
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 6) “Full parse” test: __call__(ctx) populates ctx["parsed"] with all fields
-# ──────────────────────────────────────────────────────────────────────────────
+###################################################################################################
+# 6) “Full parse” test: __call__(ctx) populates ctx[PARSED_ADDRESS] with all fields
+###################################################################################################
 @pytest.mark.skip
 @pytest.mark.parametrize(
     "raw_address, expected_dict",
     [
         (
             "70 Grange Road, 10-02 Grange 70, Singapore 249574",
-            {"unit": "10-02", "postcode": "249574", "house_number": "70", "road": "Grange Road", "building": ""},
+            {
+                UNIT_NUMBER: "10-02",
+                POSTAL_CODE: "249574",
+                BLOCK_NUMBER: "70",
+                STREET_NAME: "Grange Road",
+                BUILDING_NAME: "",
+            },
         ),
         (
             "Blk 230 Goldhill View Singapore 308826",
-            {"unit": "", "postcode": "308826", "house_number": "230", "road": "Goldhill View", "building": ""},
+            {
+                UNIT_NUMBER: "",
+                POSTAL_CODE: "308826",
+                BLOCK_NUMBER: "230",
+                STREET_NAME: "Goldhill View",
+                BUILDING_NAME: "",
+            },
         ),
         (
             "Nallur Road, 15A, Singapore 456622",
-            {"unit": "", "postcode": "456622", "house_number": "15A", "road": "Nallur Road", "building": ""},
+            {
+                UNIT_NUMBER: "",
+                POSTAL_CODE: "456622",
+                BLOCK_NUMBER: "15A",
+                STREET_NAME: "Nallur Road",
+                BUILDING_NAME: "",
+            },
         ),
         (
             "Apt 05-47 83 Flora Drive, Singapore 506887",
-            {"unit": "05-47", "postcode": "506887", "house_number": "83", "road": "Flora Drive", "building": ""},
+            {
+                UNIT_NUMBER: "05-47",
+                POSTAL_CODE: "506887",
+                BLOCK_NUMBER: "83",
+                STREET_NAME: "Flora Drive",
+                BUILDING_NAME: "",
+            },
         ),
         (
             "MyTower, 42, Orchard Road, Singapore 238829",
-            {"unit": "", "postcode": "238829", "house_number": "42", "road": "Orchard Road", "building": "MyTower"},
+            {
+                UNIT_NUMBER: "",
+                POSTAL_CODE: "238829",
+                BLOCK_NUMBER: "42",
+                STREET_NAME: "Orchard Road",
+                BUILDING_NAME: "MyTower",
+            },
         ),
     ],
 )
 def test_full_parse_flow(parser, raw_address, expected_dict):
-    ctx = {"raw_address": raw_address}
+    """Should populate ctx[PARSED_ADDRESS] with all address fields from raw input."""
+    ctx = {RAW_ADDRESS: raw_address}
     updated = parser(ctx.copy())
-    parsed = updated["parsed"]
+    parsed_addr_addr = updated[PARSED_ADDRESS]
 
     # Ensure each key matches exactly
-    for key in ("unit", "postcode", "house_number", "road", "building"):
-        assert parsed[key] == expected_dict[key]
+    for key in (UNIT_NUMBER, POSTAL_CODE, BLOCK_NUMBER, STREET_NAME, BUILDING_NAME):
+        assert parsed_addr_addr[key] == expected_dict[key]
 
 
 # ──────────────────────────────────────────────────────────────────────────────

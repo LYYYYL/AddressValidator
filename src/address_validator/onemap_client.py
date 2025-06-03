@@ -1,4 +1,11 @@
-import datetime
+"""
+OneMap API client and result handler for postal code-based address lookup.
+
+This module provides a retryable API client (`OneMapApiClient`) for calling
+Singapore's OneMap address search API, and a wrapper (`OneMapClient`) that
+returns a `OneMapSearchResult` used by the validation system.
+"""
+
 from dataclasses import dataclass
 
 import requests
@@ -10,33 +17,64 @@ from tenacity import (
     wait_exponential,
 )
 
-from address_validator.search import SearchResponseStatus
-
-ONEMAP_STREET_KEY = "ROAD_NAME"
-ONEMAP_BLK_NO_KEY = "BLK_NO"
-ONEMAP_POSTCODE_KEY = "POSTAL"
+from address_validator.search import SearchResponseStatus, SearchResult
+from address_validator.utils.common import current_utc_isoformat
 
 
 @dataclass
-class OneMapSearchResult:
-    raw_addr: str
+class OneMapSearchResult(SearchResult):
+    """
+    Wrapper for OneMap search results.
+
+    Attributes:
+        result_addrs (list[dict[str, str]]): List of matched address dictionaries.
+    """
+
     result_addrs: list[dict[str, str]]
-    status: SearchResponseStatus
-    validated_at: datetime.datetime
 
     @classmethod
-    def from_results(cls, raw_addr: str, results: dict | None) -> "OneMapSearchResult":
-        now = datetime.datetime.now(datetime.UTC)
-        if results is None:
-            return cls(raw_addr, [], SearchResponseStatus.NOT_FOUND, now)
-        if isinstance(results, list):
-            if not results:
-                return cls(raw_addr, [], SearchResponseStatus.NOT_FOUND, now)
-            return cls(raw_addr, results, SearchResponseStatus.OK, now)
-        return cls(raw_addr, [], SearchResponseStatus.INVALID_API_RESPONSE, now)
+    def from_results(cls, raw_query: str, results: dict | None) -> "OneMapSearchResult":
+        """
+        Convert raw API response to a structured `OneMapSearchResult`.
+
+        Args:
+            raw_query (str): The address or postal code that was queried.
+            results (dict | None): Raw results returned from OneMap.
+
+        Returns:
+            OneMapSearchResult: Structured and timestamped result object.
+        """
+        now = current_utc_isoformat()
+        if results is None or not isinstance(results, list):
+            return cls(
+                raw_query=raw_query,
+                result_addrs=[],
+                status=SearchResponseStatus.INVALID_API_RESPONSE,
+                timestamp=now,
+            )
+        if not results:
+            return cls(
+                raw_query=raw_query,
+                result_addrs=[],
+                status=SearchResponseStatus.NOT_FOUND,
+                timestamp=now,
+            )
+        return cls(
+            raw_query=raw_query,
+            result_addrs=results,
+            status=SearchResponseStatus.OK,
+            timestamp=now,
+        )
 
 
 class OneMapApiClient:
+    """
+    Low-level API client for OneMap's postal code and address search endpoint.
+
+    Automatically retries requests on transient failures (e.g., timeout, rate limit, 5xx errors)
+    using exponential backoff.
+    """
+
     BASE_URL = "https://www.onemap.gov.sg/api/common/elastic/search"
     headers = {"Authorization": "Bearer **********************"}
 
@@ -46,8 +84,13 @@ class OneMapApiClient:
     @staticmethod
     def _should_retry_response(result: tuple[dict | None, SearchResponseStatus]) -> bool:
         """
-        Return True if the returned status is one we want to retry on:
-        RATE_LIMITED or ERROR (5xx).
+        Determine whether a response status code should trigger a retry.
+
+        Args:
+            result (tuple): A (response, status) tuple.
+
+        Returns:
+            bool: True if the response should be retried, False otherwise.
         """
         _, status = result
         return status in {SearchResponseStatus.RATE_LIMITED, SearchResponseStatus.ERROR}
@@ -68,8 +111,15 @@ class OneMapApiClient:
     )
     def fetch(self, postal_code: str) -> tuple[dict | None, SearchResponseStatus]:
         """
-        Contact OneMap’s search API. If we hit a timeout, connection error, 429, or 5xx,
-        tenacity will retry automatically up to 5 times with exponential backoff.
+        Query OneMap's address search API with a postal code.
+
+        Applies automatic retries for known transient errors using Tenacity.
+
+        Args:
+            postal_code (str): The postal code to search.
+
+        Returns:
+            tuple: (results list or None, status code)
         """
         params = {
             "searchVal": postal_code,
@@ -113,11 +163,28 @@ class OneMapApiClient:
 
 
 class OneMapClient:
+    """High-level client for OneMap that returns `OneMapSearchResult` objects."""
+
     def __init__(self):
         self.api = OneMapApiClient()
 
     def search(self, address: str) -> OneMapSearchResult:
+        """
+        Run a OneMap search query and return a structured result object.
+
+        Args:
+            address (str): Address string or postal code to search.
+
+        Returns:
+            OneMapSearchResult: Result object with addresses and status.
+        """
         results, status = self.api.fetch(address)
         if status == SearchResponseStatus.OK:
-            return OneMapSearchResult.from_results(address, results)
-        return OneMapSearchResult(address, [], status, datetime.datetime.now(datetime.UTC))
+            return OneMapSearchResult.from_results(raw_query=address, results=results)
+
+        return OneMapSearchResult(
+            raw_query=address,
+            result_addrs=[],
+            status=status,
+            timestamp=current_utc_isoformat(),
+        )

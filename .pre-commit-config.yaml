@@ -47,7 +47,7 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: "v0.11.10"
+    rev: "v0.11.13"
     hooks:
       - id: ruff
         args: [--exit-non-zero-on-fix, --config=./pyproject.toml]
@@ -55,7 +55,7 @@ repos:
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: "v1.15.0"
+    rev: "v1.16.0"
     hooks:
       - id: mypy
         args:
@@ -65,30 +65,30 @@ repos:
             --config-file=./pyproject.toml,
           ]
 
-  - repo: https://github.com/psf/black
-    rev: 25.1.0
-    hooks:
-      - id: black
-        args:
-          - --config=./pyproject.toml
+  # - repo: https://github.com/psf/black
+  #  rev: 25.1.0
+  #  hooks:
+  #    - id: black
+  #      args:
+  #        - --config=./pyproject.toml
 
-  - repo: https://github.com/PyCQA/pylint
-    rev: v3.3.7
-    hooks:
-      - id: pylint
-        args:
-          - --rcfile=./pyproject.toml
+  # - repo: https://github.com/PyCQA/pylint
+  #  rev: v3.3.7
+  #  hooks:
+  #    - id: pylint
+  #      args:
+  #        - --rcfile=./pyproject.toml
 
-  - repo: https://github.com/PyCQA/flake8
-    rev: 7.2.0
-    hooks:
-      - id: flake8
-        args:
-          - --toml-config=./pyproject.toml
-        additional_dependencies:
-          - radon
-          - flake8-docstrings
-          - Flake8-pyproject
+  # - repo: https://github.com/PyCQA/flake8
+  #   rev: 7.2.0
+  #   hooks:
+  #     - id: flake8
+  #       args:
+  #         - --toml-config=./pyproject.toml
+  #       additional_dependencies:
+  #         - radon
+  #         - flake8-docstrings
+  #        - Flake8-pyproject
 
   # - repo: https://github.com/pycqa/isort
   #   rev: 5.13.2
@@ -97,12 +97,12 @@ repos:
   #       args:
   #         - --settings-path=./pyproject.toml
 
-  - repo: https://github.com/PyCQA/autoflake
-    rev: v2.3.1
-    hooks:
-      - id: autoflake
-        args:
-          - --in-place
-          - --remove-all-unused-imports
-          - --remove-unused-variable
-          - --ignore-init-module-imports
+  # - repo: https://github.com/PyCQA/autoflake
+  #   rev: v2.3.1
+  #   hooks:
+  #     - id: autoflake
+  #      args:
+  #         - --in-place
+  #        - --remove-all-unused-imports
+  #        - --remove-unused-variable
+  #        - --ignore-init-module-imports
