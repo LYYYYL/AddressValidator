@@ -48,9 +48,8 @@ function run-tests {
     echo "✅ Running tests in: $@"
     mkdir -p "$THIS_DIR/test-reports/"
 
-    # Use absolute path for coverage to avoid source shadowing
     python -m pytest "${@:-$THIS_DIR/tests}" \
-        --cov="$COVERAGE_DIR" \
+        --cov="address_validator" \
         --cov-config="$THIS_DIR/pyproject.toml" \
         --cov-report html \
         --cov-report term \
