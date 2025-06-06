@@ -25,13 +25,26 @@ function lint:ci {
 # execute tests against the installed package; assumes the wheel is already installed
 function test:ci {
     INSTALLED_PKG_DIR="$(python -c 'import address_validator; print(address_validator.__path__[0])')"
-    # in CI, we must calculate the coverage for the installed package, not the src/ folder
-    COVERAGE_DIR="$INSTALLED_PKG_DIR" run-tests
+    COVERAGE_DIR="$INSTALLED_PKG_DIR"
+
+    # Change to a neutral directory to avoid local source shadowing
+    if [[ -d "/tmp" ]]; then
+        cd /tmp
+    else
+        cd "$(mktemp -d)"
+    fi
+
+    # Use first arg as test path, fallback to default
+    TEST_DIR="${1:-$THIS_DIR/tests}"
+    run-tests "$TEST_DIR"
 }
 
 # (example) ./run.sh test tests/test_states_info.py::test__slow_add
 function run-tests {
     PYTEST_EXIT_STATUS=0
+    python -c 'import address_validator; print("✅ Installed at:", address_validator.__file__)'
+    echo "✅ Current dir: $(pwd)"
+
     python -m pytest ${@:-"$THIS_DIR/tests/"} \
         --cov "${COVERAGE_DIR:-$THIS_DIR/src}" \
         --cov-report html \
