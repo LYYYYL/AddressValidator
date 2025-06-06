@@ -51,6 +51,7 @@ function run-tests {
 
     python -m pytest ${@:-"$THIS_DIR/tests/"} \
         --cov "${COVERAGE_DIR:-$THIS_DIR/src}" \
+        --cov-config "$THIS_DIR/pyproject.toml" \
         --cov-report html \
         --cov-report term \
         --cov-report xml \
