@@ -44,6 +44,10 @@ function run-tests {
     PYTEST_EXIT_STATUS=0
     python -c 'import address_validator; print("✅ Installed at:", address_validator.__file__)'
     echo "✅ Current dir: $(pwd)"
+    echo "✅ Running tests in: $@"
+
+    # Ensure test-reports dir exists
+    mkdir -p "$THIS_DIR/test-reports/"
 
     python -m pytest ${@:-"$THIS_DIR/tests/"} \
         --cov "${COVERAGE_DIR:-$THIS_DIR/src}" \
