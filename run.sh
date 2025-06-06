@@ -48,8 +48,9 @@ function run-tests {
     echo "✅ Running tests in: $@"
     mkdir -p "$THIS_DIR/test-reports/"
 
-    python -m pytest ${@:-"$THIS_DIR/tests/"} \
-        --cov="$COVERAGE_DIR" \                     # Use absolute path!
+    # Use absolute path for coverage to avoid source shadowing
+    python -m pytest "${@:-$THIS_DIR/tests}" \
+        --cov="$COVERAGE_DIR" \
         --cov-config="$THIS_DIR/pyproject.toml" \
         --cov-report html \
         --cov-report term \
@@ -63,6 +64,7 @@ function run-tests {
 
     return $PYTEST_EXIT_STATUS
 }
+
 
 # (example) ./run.sh test tests/test_states_info.py::test__slow_add
 function run-tests-verbose {
