@@ -24,29 +24,32 @@ function lint:ci {
 
 # execute tests against the installed package; assumes the wheel is already installed
 function test:ci {
+    # Resolve installed package path (assumes address_validator is already installed)
     INSTALLED_PKG_DIR="$(python -c 'import address_validator; print(address_validator.__path__[0])')"
-    COVERAGE_DIR="$INSTALLED_PKG_DIR"
+    export COVERAGE_DIR="$INSTALLED_PKG_DIR"
 
-    # Change to a neutral directory to avoid local source shadowing
-    if [[ -d "/tmp" ]]; then
+    # Avoid shadowing src/ by switching out of it
+    if [[ -d "/tmp" && -w "/tmp" ]]; then
         cd /tmp
     else
         cd "$(mktemp -d)"
     fi
 
-    # Use first arg as test path, fallback to default
-    TEST_DIR="${1:-$THIS_DIR/tests}"
+    # Accept optional test directory argument
+    local TEST_DIR="${1:-$THIS_DIR/tests}"
     run-tests "$TEST_DIR"
 }
+
 
 # (example) ./run.sh test tests/test_states_info.py::test__slow_add
 function run-tests {
     PYTEST_EXIT_STATUS=0
 
-    echo "✅ Installed at: $(python -c 'import address_validator; print(address_validator.__file__)')"
-    echo "✅ Current dir: $(pwd)"
-    echo "✅ Running tests in: $@"
-    mkdir -p "$THIS_DIR/test-reports/"
+    if [[ -n "$DEBUG" ]]; then
+        echo "✅ Installed at: $(python -c 'import address_validator; print(address_validator.__file__)')"
+        echo "✅ Current dir: $(pwd)"
+        printf "✅ Running tests in: %q " "$@"; echo
+    fi
 
     python -m pytest "${@:-$THIS_DIR/tests}" \
         --cov="address_validator" \
@@ -57,9 +60,8 @@ function run-tests {
         --junit-xml "$THIS_DIR/test-reports/report.xml" \
         --cov-fail-under 60 || ((PYTEST_EXIT_STATUS+=$?))
 
-    mv coverage.xml "$THIS_DIR/test-reports/" || true
-    mv htmlcov "$THIS_DIR/test-reports/" || true
-    mv .coverage "$THIS_DIR/test-reports/" || true
+    mkdir -p "$THIS_DIR/test-reports/"
+    mv coverage.xml htmlcov .coverage "$THIS_DIR/test-reports/" 2>/dev/null || true
 
     return $PYTEST_EXIT_STATUS
 }
