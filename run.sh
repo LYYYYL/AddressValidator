@@ -42,24 +42,25 @@ function test:ci {
 # (example) ./run.sh test tests/test_states_info.py::test__slow_add
 function run-tests {
     PYTEST_EXIT_STATUS=0
-    python -c 'import address_validator; print("✅ Installed at:", address_validator.__file__)'
+
+    echo "✅ Installed at: $(python -c 'import address_validator; print(address_validator.__file__)')"
     echo "✅ Current dir: $(pwd)"
     echo "✅ Running tests in: $@"
-
-    # Ensure test-reports dir exists
     mkdir -p "$THIS_DIR/test-reports/"
 
     python -m pytest ${@:-"$THIS_DIR/tests/"} \
-        --cov "${COVERAGE_DIR:-$THIS_DIR/src}" \
-        --cov-config "$THIS_DIR/pyproject.toml" \
+        --cov="$COVERAGE_DIR" \                     # Use absolute path!
+        --cov-config="$THIS_DIR/pyproject.toml" \
         --cov-report html \
         --cov-report term \
         --cov-report xml \
         --junit-xml "$THIS_DIR/test-reports/report.xml" \
         --cov-fail-under 60 || ((PYTEST_EXIT_STATUS+=$?))
+
     mv coverage.xml "$THIS_DIR/test-reports/" || true
     mv htmlcov "$THIS_DIR/test-reports/" || true
     mv .coverage "$THIS_DIR/test-reports/" || true
+
     return $PYTEST_EXIT_STATUS
 }
 
