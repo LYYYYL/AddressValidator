@@ -1,6 +1,6 @@
 # Singapore Address Validator
 
-[👉 Visit the Web App](http://ec2-3-106-116-1.ap-southeast-2.compute.amazonaws.com:8000/)
+[👉 Visit the Web App](https://sgcheckaddresses.com/)
 
 This project provides an address validation service tailored for small business owners in Singapore.
 It helps detect invalid or incomplete addresses, which are common causes of failed deliveries, redeliveries, and increased customer support.
@@ -49,5 +49,7 @@ make install
 make test
 
 # Run the FastAPI app with auto-reload for development
-uvicorn src.app.main:app --reload
+uvicorn src.app.main:app --reload --host 0.0.0.0 --port 8000
+# Open your webbrowser and access http://localhost:8000
+
 ```
