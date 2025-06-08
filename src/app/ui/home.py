@@ -97,7 +97,7 @@ class HomePage:
                 (
                     '<div style="background-color: #f5f5f5; border: 1px dashed #ccc; '
                     'padding: 8px; font-family: monospace; white-space: pre-line;">'
-                    "Address 1: 26 Ridout Road, Singapore 248420<br>"
+                    "Address 1: 3A Ridley Park, Singapore 248472<br>"
                     "Address 2: 288E Jurong East Street 21, #12-34, 605288"
                     "</div>"
                 )
@@ -106,7 +106,7 @@ class HomePage:
             self.textarea = (
                 ui.textarea(
                     placeholder="Paste one address per line here...",
-                    value="26 Ridout Road, Singapore 248420",
+                    value="3A Ridley Park, Singapore 248472\n288E Jurong East Street 21, #12-34, 605288",
                 )
                 .props("autogrow rows=6")
                 .style("width: 100%")
