@@ -85,7 +85,7 @@ jobs:
       - name: Lint, Format, and other static code quality checks
         run: |
           /bin/bash -x run.sh test:ci
-  deploy-to-ec2:
+  build-and-push-ecr:
     needs:
       - execute-tests
       - build-wheel-and-sdist
@@ -93,35 +93,33 @@ jobs:
       - check-version-txt
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Download wheel and sdist
-        uses: actions/download-artifact@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          name: wheel-and-sdist
-          path: ./dist/
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Clean remote deployment directory
-        uses: appleboy/ssh-action@v1.2.2
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            echo "🧼 Removing old deployment directory..."
-            rm -rf ~/address_validator
-            mkdir -p ~/address_validator
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Upload dist + Dockerfile to EC2
-        uses: appleboy/scp-action@v1.0.0
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "dist/*.whl,requirements.txt,Dockerfile.aws,version.txt"
-          target: "~/address_validator"
+      - name: Build and push Docker image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_NAME: address-validator
+          VERSION: ${{ github.sha }}
+        run: |
+          docker build -f Dockerfile.aws -t $ECR_REGISTRY/$IMAGE_NAME:$VERSION .
+          docker push $ECR_REGISTRY/$IMAGE_NAME:$VERSION
 
+  deploy-to-ec2:
+    needs:
+      - build-and-push-ecr
+    runs-on: ubuntu-latest
+    steps:
       - name: SSH into EC2 and deploy Docker container
         uses: appleboy/ssh-action@v1.2.2
         with:
@@ -130,24 +128,20 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -euo pipefail
-            cd ~/address_validator
+            version=${{ github.sha }}
+            image="${{ secrets.ECR_REGISTRY }}/address-validator:$version"
 
             echo "🛑 Stopping old container (if any)..."
             docker stop address_validator || true
             docker rm address_validator || true
 
-            echo "🧹 Cleaning up old images..."
-            docker image prune -f || true
-
-            echo "🧱 Rebuilding Docker image..."
-            version=$(cat version.txt)
-            docker build -f Dockerfile.aws -t address_validator:$version .
+            echo "📦 Pulling image from ECR..."
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
+              docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+            docker pull $image
 
             echo "🚀 Running new container..."
-            docker run -d -p 8000:8000 --name address_validator address_validator:$version
-
-            echo "📦 Capturing logs (background)..."
-            docker logs address_validator > deploy.log 2>&1 &
+            docker run -d -p 8000:8000 --name address_validator $image
 
   add-tag:
     needs:
