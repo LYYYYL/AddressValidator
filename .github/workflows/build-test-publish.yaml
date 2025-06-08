@@ -96,6 +96,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Download wheel and sdist
+        uses: actions/download-artifact@v4
+        with:
+          name: wheel-and-sdist
+          path: ./dist/
+
       - name: Upload dist + Dockerfile to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
