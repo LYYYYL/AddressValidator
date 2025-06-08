@@ -17,7 +17,7 @@ What it doesn't do:
 Stack overview:
 1. Python (Object-Oriented Programming) with design patterns and Test-Driven Development (TDD)
 2. FastAPI backend with NiceGUI frontend
-3. CI/CD pipeline using GitHub Actions for linting, testing, and building the Python package
+3. CI/CD pipeline using GitHub Actions for linting, testing, building the Python package, and auto-deploying to AWS EC2
 4. Containerization using Docker
 5. Cloud deployment on AWS EC2
 6. OneMap API integration for address validation
@@ -26,12 +26,11 @@ Stack overview:
 
 
 Planned improvements:
-1. CI/CD pipeline for automated deployment to AWS EC2 via GitHub Actions
-2. User upload interface to support batch address validation via spreadsheet (Excel/CSV)
-3. Heuristic and LLM to intelligently guess column and row formats in uploaded Excel/CSV files
-4. Add logging and monitoring
-5. Search result caching with PostgreSQL database
-6. User login and customization
+1. User upload interface to support batch address validation via spreadsheet (Excel/CSV)
+2. Heuristic and LLM to intelligently guess column and row formats in uploaded Excel/CSV files
+3. Add logging and monitoring
+4. Search result caching with PostgreSQL database
+5. User login and customization
 
 ## Development quick start on Ubuntu Linux/WSL2 for Windows
 
