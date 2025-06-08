@@ -74,13 +74,17 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: 3.12
+      - name: Download wheel and sdist
+        uses: actions/download-artifact@v4
+        with:
+          name: wheel-and-sdist
+          path: ./dist/
       - name: Install test dependencies
         run: |
           pip install pytest pytest-cov ./dist/*.whl
       - name: Lint, Format, and other static code quality checks
         run: |
           /bin/bash -x run.sh test:ci
-
   deploy-to-ec2:
     needs:
       - execute-tests
