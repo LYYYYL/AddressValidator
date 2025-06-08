@@ -141,7 +141,7 @@ jobs:
 
             echo "🧱 Rebuilding Docker image..."
             version=$(cat version.txt)
-            DOCKER_BUILDKIT=1 docker buildx build -f Dockerfile.aws -t address_validator:$version .
+            docker build -f Dockerfile.aws -t address_validator:$version .
 
             echo "🚀 Running new container..."
             docker run -d -p 8000:8000 --name address_validator address_validator:$version
