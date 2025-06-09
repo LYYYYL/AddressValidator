@@ -141,12 +141,16 @@ jobs:
 
       - name: Set image output (base64-encoded to bypass secret warning)
         id: set-image
-        shell: bash
         run: |
-          echo "IMAGE=$ECR_REGISTRY/$IMAGE_NAME:$VERSION"
-          IMAGE_B64=$(echo -n "$ECR_REGISTRY/$IMAGE_NAME:$VERSION" | base64)
-          echo "image_b64=$IMAGE_B64" >> $GITHUB_OUTPUT
-
+          IMAGE="$ECR_REGISTRY/$IMAGE_NAME:$VERSION"
+          echo "IMAGE=$IMAGE"
+          IMAGE_B64=$(echo -n "$IMAGE" | base64)
+          echo "image_b64=$IMAGE_B64" >> "$GITHUB_OUTPUT"
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_NAME: address-validator
+          VERSION: ${{ github.sha }}
+# Deploy the Docker image to an EC2 instance using SSH
 
   deploy-to-ec2:
     needs: build-and-push-ecr
