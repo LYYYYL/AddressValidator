@@ -173,6 +173,8 @@ jobs:
     needs: build-and-push-ecr
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Decode image name
         id: decode-image
