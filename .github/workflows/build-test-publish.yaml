@@ -128,7 +128,7 @@ jobs:
           IMAGE_NAME: address-validator
           VERSION: ${{ github.sha }}
         run: |
-          echo "🐳 Building Docker image..."
+          echo "🐳 Building Docker image...."
           docker build -f Dockerfile.aws -t $ECR_REGISTRY/$IMAGE_NAME:$VERSION .
 
           echo "📤 Pushing Docker image to ECR..."
@@ -143,26 +143,6 @@ jobs:
         run: |
           echo "image=$ECR_REGISTRY/$IMAGE_NAME:$VERSION" >> "$GITHUB_OUTPUT"
 
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build and push Docker image to ECR
-        id: docker-build
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_NAME: address-validator
-          VERSION: ${{ github.sha }}
-        run: |
-          echo "🐳 Building Docker image..."
-          docker build -f Dockerfile.aws -t $ECR_REGISTRY/$IMAGE_NAME:$VERSION .
-
-          echo "📤 Pushing Docker image to ECR..."
-          docker push $ECR_REGISTRY/$IMAGE_NAME:$VERSION
-
-          echo "✅ Image pushed: $ECR_REGISTRY/$IMAGE_NAME:$VERSION"
-          echo "image=$ECR_REGISTRY/$IMAGE_NAME:$VERSION" >> $GITHUB_OUTPUT
 
   deploy-to-ec2:
     needs:
