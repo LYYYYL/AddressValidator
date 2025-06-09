@@ -85,16 +85,20 @@ jobs:
       - name: Lint, Format, and other static code quality checks
         run: |
           /bin/bash -x run.sh test:ci
-  deploy-to-ec2:
+
+
+  build-and-push-ecr:
     needs:
       - execute-tests
       - build-wheel-and-sdist
       - lint-format-and-static-code-checks
       - check-version-txt
     runs-on: ubuntu-latest
+    outputs:
+      image_b64: ${{ steps.set-image.outputs.image_b64 }}
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Download wheel and sdist
         uses: actions/download-artifact@v4
@@ -102,52 +106,97 @@ jobs:
           name: wheel-and-sdist
           path: ./dist/
 
-      - name: Clean remote deployment directory
+      - name: "Debug: list downloaded artifacts"
+        run: |
+          echo "📦 Contents of ./dist directory:"
+          ls -lh ./dist
+          echo "🔍 Wheel file(s) detected:"
+          find ./dist -name '*.whl'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image to ECR
+        id: docker-build
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_NAME: address-validator
+          VERSION: ${{ github.sha }}
+        run: |
+          echo "🐳 Building Docker image...."
+          docker build -f Dockerfile.aws -t $ECR_REGISTRY/$IMAGE_NAME:$VERSION .
+
+          echo "📤 Pushing Docker image to ECR..."
+          docker push $ECR_REGISTRY/$IMAGE_NAME:$VERSION
+
+          echo "IMAGE=$ECR_REGISTRY/$IMAGE_NAME:$VERSION" >> $GITHUB_ENV
+
+
+
+      - name: Set image output (base64-encoded to bypass secret warning)
+        id: set-image
+        shell: bash
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_NAME: address-validator
+          VERSION: ${{ github.sha }}
+        run: |
+          echo "🧪 Debug: ECR_REGISTRY=$ECR_REGISTRY"
+          echo "🧪 Debug: IMAGE_NAME=$IMAGE_NAME"
+          echo "🧪 Debug: VERSION=$VERSION"
+
+          if [[ -z "$ECR_REGISTRY" || -z "$IMAGE_NAME" || -z "$VERSION" ]]; then
+            echo "❌ One or more required variables are missing"
+            exit 1
+          fi
+
+          IMAGE="$ECR_REGISTRY/$IMAGE_NAME:$VERSION"
+          echo "✅ IMAGE=$IMAGE"
+
+          IMAGE_B64=$(echo -n "$IMAGE" | base64 | tr -d '\n')
+          echo "🧪 Debug: IMAGE_B64=$IMAGE_B64"
+
+          echo "image_b64=$IMAGE_B64" >> "$GITHUB_OUTPUT"
+
+
+# Deploy the Docker image to an EC2 instance using SSH
+
+  deploy-to-ec2:
+    needs: build-and-push-ecr
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Decode image name
+        id: decode-image
+        run: |
+          IMAGE_B64="${{ needs.build-and-push-ecr.outputs.image_b64 }}"
+          IMAGE=$(echo "$IMAGE_B64" | base64 --decode)
+
+          if [[ -z "$IMAGE" || "$IMAGE" == "/"* ]]; then
+            echo "❌ Decoded IMAGE is empty or malformed: '$IMAGE'"
+            exit 1
+          fi
+
+          echo "Decoded IMAGE=$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: SSH into EC2 and deploy
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            echo "🧼 Removing old deployment directory..."
-            rm -rf ~/address_validator
-            mkdir -p ~/address_validator
+            ./deploy-address-validator.sh ${{ steps.decode-image.outputs.image }}
 
-      - name: Upload dist + Dockerfile to EC2
-        uses: appleboy/scp-action@v1.0.0
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "dist/*.whl,requirements.txt,Dockerfile.aws,version.txt"
-          target: "~/address_validator"
-
-      - name: SSH into EC2 and deploy Docker container
-        uses: appleboy/ssh-action@v1.2.2
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            set -euo pipefail
-            cd ~/address_validator
-
-            echo "🛑 Stopping old container (if any)..."
-            docker stop address_validator || true
-            docker rm address_validator || true
-
-            echo "🧹 Cleaning up old images..."
-            docker image prune -f || true
-
-            echo "🧱 Rebuilding Docker image..."
-            version=$(cat version.txt)
-            docker build -f Dockerfile.aws -t address_validator:$version .
-
-            echo "🚀 Running new container..."
-            docker run -d -p 8000:8000 --name address_validator address_validator:$version
-
-            echo "📦 Capturing logs (background)..."
-            docker logs address_validator > deploy.log 2>&1 &
 
   add-tag:
     needs:
