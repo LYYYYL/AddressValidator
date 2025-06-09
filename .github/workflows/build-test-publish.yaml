@@ -197,7 +197,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           source: ./scripts/deploy-address-validator-on-aws.sh
-          target: /tmp/
+          target: /tmp
 
       - name: SSH into EC2 and deploy
         uses: appleboy/ssh-action@v1.2.2
