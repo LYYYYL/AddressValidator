@@ -93,7 +93,7 @@ jobs:
       - check-version-txt
     runs-on: ubuntu-latest
     outputs:
-      image: ${{ steps.set-image.outputs.image }}
+      docker_image_tag: ${{ steps.set-image.outputs.docker_image_tag }}
     steps:
       - uses: actions/checkout@v4
 
@@ -136,10 +136,12 @@ jobs:
 
       - name: Set image output
         id: set-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_NAME: address-validator
+          VERSION: ${{ github.sha }}
         run: |
-          echo "image=${{ steps.login-ecr.outputs.registry }}/address-validator:${{ github.sha }}" >> $GITHUB_OUTPUT
-
-
+          echo "docker_image_tag=$ECR_REGISTRY/$IMAGE_NAME:$VERSION" >> "$GITHUB_OUTPUT"
 
   deploy-to-ec2:
     needs:
@@ -147,25 +149,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: "Debug: print image"
-        run: echo "IMAGE=${{ needs.build-and-push-ecr.outputs.image }}"
+        run: echo "IMAGE=${{ needs.build-and-push-ecr.outputs.docker_image_tag }}"
 
       - name: SSH into EC2 and deploy using script
         uses: appleboy/ssh-action@v1.2.2
         env:
-          IMAGE: ${{ needs.build-and-push-ecr.outputs.image }}
+          IMAGE: ${{ needs.build-and-push-ecr.outputs.docker_image_tag }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            echo "✅ Connected to EC2"
-            echo "🔍 IMAGE env var received in EC2: $IMAGE"
-            echo "📁 Listing /home/ubuntu:"
-            ls -lh /home/ubuntu
-            echo "🚀 Running deploy script..."
+            echo "Running deploy script with image: $IMAGE"
             /home/ubuntu/deploy-address-validator.sh "$IMAGE"
-
-
 
 
   add-tag:
