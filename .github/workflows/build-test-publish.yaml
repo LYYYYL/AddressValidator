@@ -132,7 +132,7 @@ jobs:
           VERSION: ${{ github.sha }}
         run: |
           echo "🐳 Building Docker image...."
-          docker build -f Dockerfile.aws -t $ECR_REGISTRY/$IMAGE_NAME:$VERSION .
+          docker build -f Dockerfile.github -t $ECR_REGISTRY/$IMAGE_NAME:$VERSION .
 
           echo "📤 Pushing Docker image to ECR..."
           docker push $ECR_REGISTRY/$IMAGE_NAME:$VERSION
@@ -185,8 +185,17 @@ jobs:
             exit 1
           fi
 
-          echo "Decoded IMAGE=$IMAGE"
+          echo "✅ Decoded IMAGE=$IMAGE"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload deploy script to EC2
+        uses: appleboy/scp-action@v0.1.6
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: ./scripts/deploy-address-validator-on-aws.sh
+          target: /tmp/
 
       - name: SSH into EC2 and deploy
         uses: appleboy/ssh-action@v1.2.2
@@ -195,7 +204,12 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            ./deploy-address-validator.sh ${{ steps.decode-image.outputs.image }}
+            echo "📦 Making script executable..."
+            chmod +x /tmp/deploy-address-validator-on-aws.sh
+
+            echo "📦 Running deployment script on EC2..."
+            /tmp/deploy-address-validator-on-aws.sh "${{ steps.decode-image.outputs.image }}"
+
 
 
   add-tag:
