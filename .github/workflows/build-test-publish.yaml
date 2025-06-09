@@ -145,6 +145,11 @@ jobs:
 
       - name: Save image name to artifact
         run: echo "$ECR_REGISTRY/$IMAGE_NAME:$VERSION" > image_name.txt
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_NAME: address-validator
+          VERSION: ${{ github.sha }}
+
 
       - name: Upload image name as artifact
         uses: actions/upload-artifact@v4
