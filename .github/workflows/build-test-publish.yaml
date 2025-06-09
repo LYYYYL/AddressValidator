@@ -149,9 +149,9 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            IMAGE="${{ needs.build-and-push-ecr.outputs.image }}"
-            echo "Running deploy script with image: $IMAGE"
-            /home/ubuntu/deploy-address-validator.sh "$IMAGE"
+            echo "Running deploy script with image: ${{ needs.build-and-push-ecr.outputs.image }}"
+            /home/ubuntu/deploy-address-validator.sh "${{ needs.build-and-push-ecr.outputs.image }}"
+
 
   add-tag:
     needs:
