@@ -141,11 +141,14 @@ jobs:
     needs:
       - build-and-push-ecr
     runs-on: ubuntu-latest
-    env:
-      IMAGE: ${{ needs.build-and-push-ecr.outputs.image }}
     steps:
+      - name: "Debug: print image"
+        run: echo "IMAGE=${{ needs.build-and-push-ecr.outputs.image }}"
+
       - name: SSH into EC2 and deploy using script
         uses: appleboy/ssh-action@v1.2.2
+        env:
+          IMAGE: ${{ needs.build-and-push-ecr.outputs.image }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
@@ -153,6 +156,7 @@ jobs:
           script: |
             echo "Running deploy script with image: $IMAGE"
             /home/ubuntu/deploy-address-validator.sh "$IMAGE"
+
 
 
 
