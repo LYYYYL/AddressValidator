@@ -85,6 +85,8 @@ jobs:
       - name: Lint, Format, and other static code quality checks
         run: |
           /bin/bash -x run.sh test:ci
+
+
   build-and-push-ecr:
     needs:
       - execute-tests
@@ -135,43 +137,34 @@ jobs:
           echo "📤 Pushing Docker image to ECR..."
           docker push $ECR_REGISTRY/$IMAGE_NAME:$VERSION
 
+          echo "IMAGE=$ECR_REGISTRY/$IMAGE_NAME:$VERSION" >> $GITHUB_ENV
+
       - name: Set image output (base64-encoded to bypass secret warning)
         id: set-image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_NAME: address-validator
-          VERSION: ${{ github.sha }}
         run: |
-          IMAGE="$ECR_REGISTRY/$IMAGE_NAME:$VERSION"
-          ENCODED=$(echo -n "$IMAGE" | base64)
-          echo "::notice title=Built Image::$IMAGE"
-          echo "image_b64=$ENCODED" >> "$GITHUB_OUTPUT"
+          echo "image_b64=$(echo -n "$IMAGE" | base64)" >> "$GITHUB_OUTPUT"
+
 
 
 
   deploy-to-ec2:
-    needs:
-      - build-and-push-ecr
+    needs: build-and-push-ecr
     runs-on: ubuntu-latest
     steps:
-      - name: Decode image from base64
-        id: decode
+      - name: Decode image name
         run: |
-          echo "${{ needs.build-and-push-ecr.outputs.image_b64 }}" | base64 -d > image.txt
-          IMAGE=$(cat image.txt)
+          IMAGE=$(echo "${{ needs.build-and-push-ecr.outputs.image_b64 }}" | base64 --decode)
           echo "IMAGE=$IMAGE" >> $GITHUB_ENV
 
-      - name: SSH into EC2 and deploy using script
+      - name: SSH into EC2 and deploy
         uses: appleboy/ssh-action@v1.2.2
-        env:
-          IMAGE: ${{ env.IMAGE }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            echo "🧪 [DEBUG] Deploying image: $IMAGE"
             /home/ubuntu/deploy-address-validator.sh "$IMAGE"
+
 
 
 
