@@ -103,7 +103,7 @@ jobs:
           name: wheel-and-sdist
           path: ./dist/
 
-      - name: list downloaded artifacts
+      - name: "Debug: list downloaded artifacts"
         run: |
           echo "📦 Contents of ./dist directory:"
           ls -lh ./dist
@@ -150,15 +150,21 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -euo pipefail
+
             image="${{ needs.build-and-push-ecr.outputs.image }}"
+
+            echo "🐳 Deploying Docker image to EC2..."
+            echo "🪪 Resolved image: $image"
 
             echo "🛑 Stopping old container (if any)..."
             docker stop address_validator || true
             docker rm address_validator || true
 
-            echo "📦 Pulling image from ECR..."
+            echo "🔐 Logging in to ECR..."
             aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
               docker login --username AWS --password-stdin $(echo $image | cut -d/ -f1)
+
+            echo "📥 Pulling image from ECR..."
             docker pull $image
 
             echo "🚀 Running new container..."
