@@ -132,7 +132,7 @@ jobs:
           VERSION: ${{ github.sha }}
         run: |
           echo "🐳 Building Docker image...."
-          docker build -f Dockerfile.github -t $ECR_REGISTRY/$IMAGE_NAME:$VERSION .
+          docker build -f docker/Dockerfile.github -t $ECR_REGISTRY/$IMAGE_NAME:$VERSION .
 
           echo "📤 Pushing Docker image to ECR..."
           docker push $ECR_REGISTRY/$IMAGE_NAME:$VERSION
