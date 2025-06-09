@@ -152,7 +152,6 @@ jobs:
             set -euo pipefail
 
             image="${{ needs.build-and-push-ecr.outputs.image }}"
-
             echo "🐳 Deploying Docker image to EC2..."
             echo "🪪 Resolved image: $image"
 
