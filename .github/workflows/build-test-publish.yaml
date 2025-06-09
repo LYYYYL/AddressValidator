@@ -168,7 +168,7 @@ jobs:
           IMAGE_B64=$(echo -n "$IMAGE" | base64 | tr -d '\n')
           echo "🧪 Debug: IMAGE_B64=$IMAGE_B64"
 
-          echo "image_b64=$IMAGE_B64" >> "$GITHUB_OUTPUT"
+          echo "::set-output name=image_b64::$IMAGE_B64"
 
 
 # Deploy the Docker image to an EC2 instance using SSH
