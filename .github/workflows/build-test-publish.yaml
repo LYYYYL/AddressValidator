@@ -107,13 +107,6 @@ jobs:
           name: wheel-and-sdist
           path: ./dist/
 
-      - name: "Debug: list downloaded artifacts"
-        run: |
-          echo "📦 Contents of ./dist directory:"
-          ls -lh ./dist
-          echo "🔍 Wheel file(s) detected:"
-          find ./dist -name '*.whl'
-
       - name: Configure AWS credentials using OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -124,9 +117,6 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Debug ECR registry
-        run: echo "🧪 ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}"
 
       - name: Build and push Docker image to ECR
         id: docker-build
