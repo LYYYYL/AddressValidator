@@ -207,7 +207,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             echo "📦 Making script executable..."
-            chmod +x /tmp/deploy-address-validator-on-aws.sh
+            chmod +x /tmp/scripts/deploy-address-validator-on-aws.sh
 
             echo "📦 Running deployment script on EC2..."
             /tmp/scripts/deploy-address-validator-on-aws.sh "${{ steps.decode-image.outputs.image }}"
