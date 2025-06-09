@@ -128,7 +128,7 @@ jobs:
           IMAGE_NAME: address-validator
           VERSION: ${{ github.sha }}
         run: |
-          echo "🐳 Building Docker image...."
+          echo "🐳 Building Docker image..."
           docker build -f Dockerfile.aws -t $ECR_REGISTRY/$IMAGE_NAME:$VERSION .
 
           echo "📤 Pushing Docker image to ECR..."
@@ -136,12 +136,9 @@ jobs:
 
       - name: Set image output
         id: set-image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_NAME: address-validator
-          VERSION: ${{ github.sha }}
         run: |
-          echo "image=$ECR_REGISTRY/$IMAGE_NAME:$VERSION" >> "$GITHUB_OUTPUT"
+          echo "image=${{ steps.login-ecr.outputs.registry }}/address-validator:${{ github.sha }}" >> $GITHUB_OUTPUT
+
 
 
   deploy-to-ec2:
@@ -161,7 +158,11 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            echo "Running deploy script with image: $IMAGE"
+            echo "✅ Connected to EC2"
+            echo "🔍 IMAGE env var received in EC2: $IMAGE"
+            echo "📁 Listing /home/ubuntu:"
+            ls -lh /home/ubuntu
+            echo "🚀 Running deploy script..."
             /home/ubuntu/deploy-address-validator.sh "$IMAGE"
 
 
