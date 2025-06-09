@@ -144,9 +144,14 @@ jobs:
         id: set-image
         shell: bash
         run: |
+          if [[ -z "$ECR_REGISTRY" || -z "$IMAGE_NAME" || -z "$VERSION" ]]; then
+            echo "❌ One or more required variables are missing"
+            exit 1
+          fi
+
           IMAGE="$ECR_REGISTRY/$IMAGE_NAME:$VERSION"
-          echo "IMAGE=$IMAGE"
-          IMAGE_B64=$(echo -n "$IMAGE" | base64)
+          echo "✅ IMAGE=$IMAGE"
+          IMAGE_B64=$(echo -n "$IMAGE" | base64 | tr -d '\n')
           echo "image_b64=$IMAGE_B64" >> "$GITHUB_OUTPUT"
 
 # Deploy the Docker image to an EC2 instance using SSH
