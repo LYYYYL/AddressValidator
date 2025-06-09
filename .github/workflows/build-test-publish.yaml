@@ -92,8 +92,16 @@ jobs:
       - lint-format-and-static-code-checks
       - check-version-txt
     runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.docker-build.outputs.image }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download wheel and sdist
+        uses: actions/download-artifact@v4
+        with:
+          name: wheel-and-sdist
+          path: ./dist/
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -107,6 +115,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push Docker image to ECR
+        id: docker-build
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_NAME: address-validator
@@ -114,6 +123,7 @@ jobs:
         run: |
           docker build -f Dockerfile.aws -t $ECR_REGISTRY/$IMAGE_NAME:$VERSION .
           docker push $ECR_REGISTRY/$IMAGE_NAME:$VERSION
+          echo "image=$ECR_REGISTRY/$IMAGE_NAME:$VERSION" >> $GITHUB_OUTPUT
 
   deploy-to-ec2:
     needs:
@@ -128,8 +138,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -euo pipefail
-            version=${{ github.sha }}
-            image="${{ secrets.ECR_REGISTRY }}/address-validator:$version"
+            image="${{ needs.build-and-push-ecr.outputs.image }}"
 
             echo "🛑 Stopping old container (if any)..."
             docker stop address_validator || true
@@ -137,7 +146,7 @@ jobs:
 
             echo "📦 Pulling image from ECR..."
             aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
-              docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+              docker login --username AWS --password-stdin $(echo $image | cut -d/ -f1)
             docker pull $image
 
             echo "🚀 Running new container..."
