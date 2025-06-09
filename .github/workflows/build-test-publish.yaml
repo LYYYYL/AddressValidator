@@ -141,10 +141,11 @@ jobs:
 
       - name: Set image output (base64-encoded to bypass secret warning)
         id: set-image
+        shell: bash
         run: |
-          echo "image_b64=$(echo -n "$IMAGE" | base64)" >> "$GITHUB_OUTPUT"
-
-
+          echo "IMAGE=$ECR_REGISTRY/$IMAGE_NAME:$VERSION"
+          IMAGE_B64=$(echo -n "$ECR_REGISTRY/$IMAGE_NAME:$VERSION" | base64)
+          echo "image_b64=$IMAGE_B64" >> $GITHUB_OUTPUT
 
 
   deploy-to-ec2:
