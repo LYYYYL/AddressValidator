@@ -103,6 +103,13 @@ jobs:
           name: wheel-and-sdist
           path: ./dist/
 
+      - name: list downloaded artifacts
+        run: |
+          echo "📦 Contents of ./dist directory:"
+          ls -lh ./dist
+          echo "🔍 Wheel file(s) detected:"
+          find ./dist -name '*.whl'
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -121,8 +128,13 @@ jobs:
           IMAGE_NAME: address-validator
           VERSION: ${{ github.sha }}
         run: |
+          echo "🐳 Building Docker image..."
           docker build -f Dockerfile.aws -t $ECR_REGISTRY/$IMAGE_NAME:$VERSION .
+
+          echo "📤 Pushing Docker image to ECR..."
           docker push $ECR_REGISTRY/$IMAGE_NAME:$VERSION
+
+          echo "✅ Image pushed: $ECR_REGISTRY/$IMAGE_NAME:$VERSION"
           echo "image=$ECR_REGISTRY/$IMAGE_NAME:$VERSION" >> $GITHUB_OUTPUT
 
   deploy-to-ec2:
