@@ -15,7 +15,8 @@ on:
         default: false
 
 permissions:
-  contents: write
+  id-token: write
+  contents: read
 
 jobs:
 
@@ -106,19 +107,12 @@ jobs:
           name: wheel-and-sdist
           path: ./dist/
 
-      - name: "Debug: list downloaded artifacts"
-        run: |
-          echo "📦 Contents of ./dist directory:"
-          ls -lh ./dist
-          echo "🔍 Wheel file(s) detected:"
-          find ./dist -name '*.whl'
-
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials using OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GitHub-OIDC-ECR-Deploy-Role
+          role-session-name: github-actions
+          aws-region: ap-southeast-2
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -139,32 +133,19 @@ jobs:
 
           echo "IMAGE=$ECR_REGISTRY/$IMAGE_NAME:$VERSION" >> $GITHUB_ENV
 
-
-
-      - name: Set image output (base64-encoded to bypass secret warning)
-        id: set-image
-        shell: bash
+      - name: Save image name to artifact
+        run: echo "$ECR_REGISTRY/$IMAGE_NAME:$VERSION" > image_name.txt
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_NAME: address-validator
           VERSION: ${{ github.sha }}
-        run: |
-          echo "🧪 Debug: ECR_REGISTRY=$ECR_REGISTRY"
-          echo "🧪 Debug: IMAGE_NAME=$IMAGE_NAME"
-          echo "🧪 Debug: VERSION=$VERSION"
 
-          if [[ -z "$ECR_REGISTRY" || -z "$IMAGE_NAME" || -z "$VERSION" ]]; then
-            echo "❌ One or more required variables are missing"
-            exit 1
-          fi
 
-          IMAGE="$ECR_REGISTRY/$IMAGE_NAME:$VERSION"
-          echo "✅ IMAGE=$IMAGE"
-
-          IMAGE_B64=$(echo -n "$IMAGE" | base64 | tr -d '\n')
-          echo "🧪 Debug: IMAGE_B64=$IMAGE_B64"
-
-          echo "image_b64=$IMAGE_B64" >> "$GITHUB_OUTPUT"
+      - name: Upload image name as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecr-image-name
+          path: image_name.txt
 
 
 # Deploy the Docker image to an EC2 instance using SSH
@@ -176,18 +157,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Decode image name
-        id: decode-image
+      - name: Download image name artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ecr-image-name
+          path: .
+
+      - name: Read image name
+        id: read-image
         run: |
-          IMAGE_B64="${{ needs.build-and-push-ecr.outputs.image_b64 }}"
-          IMAGE=$(echo "$IMAGE_B64" | base64 --decode)
-
-          if [[ -z "$IMAGE" || "$IMAGE" == "/"* ]]; then
-            echo "❌ Decoded IMAGE is empty or malformed: '$IMAGE'"
-            exit 1
-          fi
-
-          echo "✅ Decoded IMAGE=$IMAGE"
+          IMAGE=$(cat image_name.txt)
+          echo "✅ IMAGE=$IMAGE"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
       - name: Upload deploy script to EC2
@@ -210,7 +190,7 @@ jobs:
             chmod +x /tmp/scripts/deploy-address-validator-on-aws.sh
 
             echo "📦 Running deployment script on EC2..."
-            /tmp/scripts/deploy-address-validator-on-aws.sh "${{ steps.decode-image.outputs.image }}"
+            /tmp/scripts/deploy-address-validator-on-aws.sh "${{ steps.read-image.outputs.image }}"
 
 
 
