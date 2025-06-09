@@ -157,10 +157,14 @@ jobs:
         id: decode-image
         run: |
           IMAGE=$(echo "${{ needs.build-and-push-ecr.outputs.image_b64 }}" | base64 --decode)
+
+          if [[ -z "$IMAGE" ]]; then
+            echo "❌ Decoded IMAGE is empty. Failing early."
+            exit 1
+          fi
+
           echo "Decoded IMAGE=$IMAGE"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
-
-
       - name: SSH into EC2 and deploy
         uses: appleboy/ssh-action@v1.2.2
         with:
@@ -169,7 +173,6 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             ./deploy-address-validator.sh ${{ steps.decode-image.outputs.image }}
-
 
 
   add-tag:
