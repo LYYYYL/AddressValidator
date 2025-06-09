@@ -156,15 +156,17 @@ jobs:
       - name: Decode image name
         id: decode-image
         run: |
-          IMAGE=$(echo "${{ needs.build-and-push-ecr.outputs.image_b64 }}" | base64 --decode)
+          IMAGE_B64="${{ needs.build-and-push-ecr.outputs.image_b64 }}"
+          IMAGE=$(echo "$IMAGE_B64" | base64 --decode)
 
-          if [[ -z "$IMAGE" ]]; then
-            echo "❌ Decoded IMAGE is empty. Failing early."
+          if [[ -z "$IMAGE" || "$IMAGE" == "/"* ]]; then
+            echo "❌ Decoded IMAGE is empty or malformed: '$IMAGE'"
             exit 1
           fi
 
           echo "Decoded IMAGE=$IMAGE"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
       - name: SSH into EC2 and deploy
         uses: appleboy/ssh-action@v1.2.2
         with:
