@@ -93,7 +93,7 @@ jobs:
       - check-version-txt
     runs-on: ubuntu-latest
     outputs:
-      docker_image_tag: ${{ steps.set-image.outputs.docker_image_tag }}
+      image: ${{ steps.set-image.outputs.image }}
     steps:
       - uses: actions/checkout@v4
 
@@ -128,7 +128,7 @@ jobs:
           IMAGE_NAME: address-validator
           VERSION: ${{ github.sha }}
         run: |
-          echo "🐳 Building Docker image..."
+          echo "🐳 Building Docker image...."
           docker build -f Dockerfile.aws -t $ECR_REGISTRY/$IMAGE_NAME:$VERSION .
 
           echo "📤 Pushing Docker image to ECR..."
@@ -141,7 +141,12 @@ jobs:
           IMAGE_NAME: address-validator
           VERSION: ${{ github.sha }}
         run: |
-          echo "docker_image_tag=$ECR_REGISTRY/$IMAGE_NAME:$VERSION" >> "$GITHUB_OUTPUT"
+          IMAGE="$ECR_REGISTRY/$IMAGE_NAME:$VERSION"
+          echo "::notice title=Built Image::$IMAGE"
+          echo "image<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
 
   deploy-to-ec2:
     needs:
@@ -149,19 +154,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: "Debug: print image"
-        run: echo "IMAGE=${{ needs.build-and-push-ecr.outputs.docker_image_tag }}"
+        run: echo "IMAGE=${{ needs.build-and-push-ecr.outputs.image }}"
 
       - name: SSH into EC2 and deploy using script
         uses: appleboy/ssh-action@v1.2.2
         env:
-          IMAGE: ${{ needs.build-and-push-ecr.outputs.docker_image_tag }}
+          IMAGE: ${{ needs.build-and-push-ecr.outputs.image }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            echo "Running deploy script with image: $IMAGE"
+            echo "🧪 [DEBUG] Deploying image: $IMAGE"
             /home/ubuntu/deploy-address-validator.sh "$IMAGE"
+
 
 
   add-tag:
