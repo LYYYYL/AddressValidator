@@ -93,7 +93,7 @@ jobs:
       - check-version-txt
     runs-on: ubuntu-latest
     outputs:
-      image: ${{ steps.docker-build.outputs.image }}
+      image: ${{ steps.set-image.outputs.image }}
     steps:
       - uses: actions/checkout@v4
 
@@ -116,6 +116,33 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image to ECR
+        id: docker-build
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_NAME: address-validator
+          VERSION: ${{ github.sha }}
+        run: |
+          echo "🐳 Building Docker image..."
+          docker build -f Dockerfile.aws -t $ECR_REGISTRY/$IMAGE_NAME:$VERSION .
+
+          echo "📤 Pushing Docker image to ECR..."
+          docker push $ECR_REGISTRY/$IMAGE_NAME:$VERSION
+
+      - name: Set image output
+        id: set-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_NAME: address-validator
+          VERSION: ${{ github.sha }}
+        run: |
+          echo "image=$ECR_REGISTRY/$IMAGE_NAME:$VERSION" >> "$GITHUB_OUTPUT"
+
 
       - name: Login to Amazon ECR
         id: login-ecr
