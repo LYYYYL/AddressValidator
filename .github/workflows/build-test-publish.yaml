@@ -112,7 +112,7 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GitHub-OIDC-ECR-Deploy-Role
           role-session-name: github-actions
-          aws-region: ap-southeast-2
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -139,12 +139,6 @@ jobs:
       - name: Upload image name to S3
         run: |
           aws s3 cp image_name.txt s3://${{ secrets.S3_BUCKET_NAME }}/latest-image.txt
-
-      - name: Upload image name as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ecr-image-name
-          path: image_name.txt
 
 
 # Deploy the Docker image to an EC2 instance using SSH
