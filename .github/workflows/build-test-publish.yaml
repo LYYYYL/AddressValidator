@@ -112,7 +112,7 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GitHub-OIDC-ECR-Deploy-Role
           role-session-name: github-actions
-          aws-region: ap-southeast-2
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -133,19 +133,12 @@ jobs:
 
           echo "IMAGE=$ECR_REGISTRY/$IMAGE_NAME:$VERSION" >> $GITHUB_ENV
 
-      - name: Save image name to artifact
-        run: echo "$ECR_REGISTRY/$IMAGE_NAME:$VERSION" > image_name.txt
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_NAME: address-validator
-          VERSION: ${{ github.sha }}
+      - name: Save image name to file
+        run: echo "$IMAGE" > image_name.txt
 
-
-      - name: Upload image name as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ecr-image-name
-          path: image_name.txt
+      - name: Upload image name to S3
+        run: |
+          aws s3 cp image_name.txt s3://${{ secrets.S3_BUCKET_NAME }}/latest-image.txt
 
 
 # Deploy the Docker image to an EC2 instance using SSH
@@ -154,43 +147,30 @@ jobs:
     needs: build-and-push-ecr
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download image name artifact
-        uses: actions/download-artifact@v4
+      - name: Send run command to EC2 via SSM
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          name: ecr-image-name
-          path: .
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GitHub-OIDC-ECR-Deploy-Role
+          role-session-name: github-actions
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Read image name
-        id: read-image
+      - name: Trigger EC2 SSM to pull image and redeploy
         run: |
-          IMAGE=$(cat image_name.txt)
-          echo "✅ IMAGE=$IMAGE"
-          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
-
-      - name: Upload deploy script to EC2
-        uses: appleboy/scp-action@v0.1.6
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: ./scripts/deploy-address-validator-on-aws.sh
-          target: /tmp/
-
-      - name: SSH into EC2 and deploy
-        uses: appleboy/ssh-action@v1.2.2
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            echo "📦 Making script executable..."
-            chmod +x /tmp/scripts/deploy-address-validator-on-aws.sh
-
-            echo "📦 Running deployment script on EC2..."
-            /tmp/scripts/deploy-address-validator-on-aws.sh "${{ steps.read-image.outputs.image }}"
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+            --region ${{ secrets.AWS_REGION }} \
+            --comment "Deploy latest address-validator image" \
+            --parameters 'commands=[
+              "aws s3 cp s3://${{ secrets.S3_BUCKET_NAME }}/latest-image.txt /tmp/image_name.txt",
+              "IMAGE=$(cat /tmp/image_name.txt)",
+              "echo \"Pulling image: $IMAGE\"",
+              "docker pull $IMAGE",
+              "docker stop address-validator || true",
+              "docker rm address-validator || true",
+              "docker run -d -p 8000:8000 --restart unless-stopped --name address_validator $IMAGE"
+            ]' \
+            --output text
 
 
 
@@ -228,7 +208,7 @@ jobs:
         run: echo '${{ toJSON(strategy) }}'
       - name: Dump matrix context
         run: echo '${{ toJSON(matrix) }}'
-      - name: Dump secrets
-        run: echo '${{ toJSON(secrets) }}'
+      # - name: Dump secrets
+      #   run: echo '${{ toJSON(secrets) }}'
       - name: Dump vars
         run: echo '${{ toJSON(vars) }}'
