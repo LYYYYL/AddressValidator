@@ -8,8 +8,8 @@ on:
       - main
   workflow_dispatch:
     inputs:
-      publish_to_main:
-        description: Publish to PyPI if tests successful
+      deploy_to_prod:
+        description: Deploy to production AWS after tests
         required: true
         type: boolean
         default: false
@@ -76,7 +76,7 @@ jobs:
         with:
           python-version: 3.12
       - name: Download wheel and sdist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4q
         with:
           name: wheel-and-sdist
           path: ./dist/
@@ -95,8 +95,6 @@ jobs:
       - lint-format-and-static-code-checks
       - check-version-txt
     runs-on: ubuntu-latest
-    outputs:
-      image_b64: ${{ steps.set-image.outputs.image_b64 }}
 
     steps:
       - uses: actions/checkout@v4
@@ -141,12 +139,12 @@ jobs:
           aws s3 cp image_name.txt s3://${{ secrets.S3_BUCKET_NAME }}/latest-image.txt
 
 
-# Deploy the Docker image to an EC2 instance using SSH
-
+  # Deploy the Docker image to an EC2 instance
   deploy-to-ec2:
     needs: build-and-push-ecr
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Send run command to EC2 via SSM
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -154,6 +152,9 @@ jobs:
           role-session-name: github-actions
           aws-region: ${{ secrets.AWS_REGION }}
 
+      - name: Upload deploy script to S3
+        run: |
+          aws s3 cp scripts/deploy-address-validator-on-aws.sh s3://${{ secrets.S3_BUCKET_NAME }}/deploy-address-validator-on-aws.sh
       - name: Trigger EC2 SSM to pull image and redeploy
         run: |
           aws ssm send-command \
@@ -162,17 +163,11 @@ jobs:
             --region ${{ secrets.AWS_REGION }} \
             --comment "Deploy latest address-validator image" \
             --parameters 'commands=[
-              "aws s3 cp s3://${{ secrets.S3_BUCKET_NAME }}/latest-image.txt /tmp/image_name.txt",
-              "IMAGE=$(cat /tmp/image_name.txt)",
-              "echo \"Pulling image: $IMAGE\"",
-              "docker pull $IMAGE",
-              "docker stop address-validator || true",
-              "docker rm address-validator || true",
-              "docker run -d -p 8000:8000 --restart unless-stopped --name address_validator $IMAGE"
+              "aws s3 cp s3://${{ secrets.S3_BUCKET_NAME }}/deploy-address-validator-on-aws.sh /tmp/deploy.sh",
+              "chmod +x /tmp/deploy.sh",
+              "/tmp/deploy.sh ${{ secrets.S3_BUCKET_NAME }}"
             ]' \
             --output text
-
-
 
   add-tag:
     needs:
