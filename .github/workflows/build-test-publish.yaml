@@ -116,62 +116,17 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push Docker image to ECR
-        id: docker-build
+      - name: Run unified deploy script (build, tag, upload script, push image)
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_NAME: address-validator
-          VERSION: ${{ github.sha }}
         run: |
-          echo "🐳 Building Docker image...."
-          docker build -f docker/Dockerfile.github -t $ECR_REGISTRY/$IMAGE_NAME:$VERSION .
+          chmod +x scripts/deploy_prod.sh
+          ./scripts/deploy_prod.sh $ECR_REGISTRY address-validator ${{ github.sha }} ${{ secrets.S3_BUCKET_NAME }} ${{ secrets.EC2_INSTANCE_ID }} ${{ secrets.AWS_REGION }}
 
-          echo "📤 Pushing Docker image to ECR..."
-          docker push $ECR_REGISTRY/$IMAGE_NAME:$VERSION
-
-          echo "IMAGE=$ECR_REGISTRY/$IMAGE_NAME:$VERSION" >> $GITHUB_ENV
-
-      - name: Save image name to file
-        run: echo "$IMAGE" > image_name.txt
-
-      - name: Upload image name to S3
-        run: |
-          aws s3 cp image_name.txt s3://${{ secrets.S3_BUCKET_NAME }}/latest-image.txt
-
-
-  # Deploy the Docker image to an EC2 instance
-  deploy-to-ec2:
-    needs: build-and-push-ecr
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Send run command to EC2 via SSM
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GitHub-OIDC-ECR-Deploy-Role
-          role-session-name: github-actions
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Upload deploy script to S3
-        run: |
-          aws s3 cp scripts/deploy-address-validator-on-aws.sh s3://${{ secrets.S3_BUCKET_NAME }}/deploy-address-validator-on-aws.sh
-      - name: Trigger EC2 SSM to pull image and redeploy
-        run: |
-          aws ssm send-command \
-            --document-name "AWS-RunShellScript" \
-            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
-            --region ${{ secrets.AWS_REGION }} \
-            --comment "Deploy latest address-validator image" \
-            --parameters 'commands=[
-              "aws s3 cp s3://${{ secrets.S3_BUCKET_NAME }}/deploy-address-validator-on-aws.sh /tmp/deploy.sh",
-              "chmod +x /tmp/deploy.sh",
-              "/tmp/deploy.sh ${{ secrets.S3_BUCKET_NAME }}"
-            ]' \
-            --output text
 
   add-tag:
     needs:
-      - deploy-to-ec2
+      - build-and-push-ecr
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
