@@ -174,3 +174,15 @@ dist
 *env
 *.env
 *cache*
+
+
+# Terraform state
+*.tfstate
+*.tfstate.backup
+
+# Sensitive variable files (optional)
+*.tfvars
+
+# Terraform CLI/Plugin directories
+.terraform/
+.terraform.lock.hcl
