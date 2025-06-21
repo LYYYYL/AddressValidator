@@ -1,8 +1,8 @@
 resource "aws_s3_bucket" "app" {
-  bucket = "${var.environment}-address-validator-bucket"
+  bucket = "${var.environment}-${var.s3_bucket}"
 
   tags = {
-    Name        = "${var.environment}-address-validator"
+    Name        = "${var.environment}-${var.s3_bucket}"
     Environment = var.environment
   }
 }

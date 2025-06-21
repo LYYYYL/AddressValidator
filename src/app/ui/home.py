@@ -29,6 +29,18 @@ def build_home_page():
     When a user visits the homepage, a new `HomePage()` instance is created
     to build the interactive UI for that session.
     """
+    ui.add_head_html("""
+    <script>
+    function emitSize() {
+      emitEvent('resize', {
+        width: document.body.offsetWidth,
+        height: document.body.offsetHeight
+      });
+    }
+    window.onload = emitSize;
+    window.onresize = emitSize;
+    </script>
+    """)
 
     @ui.page("/")
     def home_page():
@@ -45,10 +57,15 @@ class HomePage:
     """
 
     def __init__(self):
-        """Initialize the HomePage and build the UI layout."""
         self.textarea = None
         self.results_container = None
+        self._last_known_width = None  # ⮅ track screen width
+        self.expanded_rows = set()  # ⮅ make expand state per session
         self._build_ui()
+
+    def _handle_resize(self, e):
+        self._last_known_width = e.args["width"]
+        print(f"📱 Resized to {self._last_known_width}px wide")
 
     def _build_ui(self):
         """
@@ -57,46 +74,69 @@ class HomePage:
         """
         ui.page_title("Singapore Address Validator")
 
-        with ui.column().classes("items-center q-pa-lg").style("max-width: 900px; margin: auto;"):
-            self._render_intro()
-            self._render_input_area()
-            self._render_results_container()
+        # ⮅ Add resize listener
+        ui.on("resize", self._handle_resize)
+
+        with (
+            ui.column()
+            .classes("items-center")
+            .style("width: 100vw; overflow-x: hidden; min-height: 100vh; margin: 0; padding-top: 56px;")
+        ):
+            with ui.column().style("max-width: 1140px; width: 100%; margin: auto;"):
+                self._render_navbar()
+                self._render_intro()  # Removed redundant main title
+                self._render_input_area()
+                self._render_results_container()
+
+    def _render_navbar(self):
+        """Render a full-width top navigation bar."""
+        with (
+            ui.element("header")
+            .classes("bg-primary text-white shadow-2")
+            .style("position: fixed; top: 0; left: 0; z-index: 1000; width: 100vw;")
+        ):
+            with (
+                ui.row()
+                .classes("items-center justify-between q-px-md")
+                .style("max-width: 1140px; margin: auto; flex-wrap: wrap; gap: 4px; height: auto; min-height: 56px;")
+            ):
+                with ui.row().classes("items-center gap-2"):
+                    ui.icon("home").classes("text-white")
+                    ui.label("Singapore Address Validator").classes("text-h5 text-white")
+
+                with ui.row().classes("items-center gap-4"):
+                    ui.link("GitHub", "https://github.com/LYYYYL/AddressValidator").classes("text-white text-body2")
+                    ui.label("v1.0").classes("text-body2 text-grey-3")
 
     def _render_intro(self):
-        """
-        Render the top section of the page including title, description,
-        and a list of address validation checks performed.
-        """
-        ui.label("Singapore Address Validator").classes("text-h3 text-primary q-mb-sm")
-        ui.label("Validate your customers’ shipping addresses before sending out the packages!").classes(
-            "text-subtitle1 text-grey-8 q-mb-md"
-        )
-        with ui.card().classes("q-pa-md bg-grey-1 q-mb-md").style("width: 100%"):
-            ui.label("✅ Checks for:").classes("text-body1 text-bold q-mb-sm")
-            ui.html(
-                """
-                <ul style="margin-left: 1.2em; padding-left: 0.5em;">
-                    <li>Missing unit number based on property type</li>
-                    <li>Invalid or missing postal code</li>
-                    <li>Match block number & street name against postal code</li>
-                    <li>Uses OneMap API and streetdirectory.com under the hood</li>
-                </ul>
-                """
-            )
+        """Render checklist with inline tick icons and clean vertical alignment."""
+        with ui.card().classes("bg-grey-1 q-mt-none").style("width: 100%"):
+            ui.label("Checks for:").classes("text-body1 text-bold")
+
+            checklist_items = [
+                "Missing unit number based on property type",
+                "Invalid or missing postal code",
+                "Match block number & street name against postal code",
+                "Uses OneMap API and streetdirectory.com under the hood",
+            ]
+
+            for item in checklist_items:
+                with ui.row().classes("items-start").style("gap: 8px; margin-bottom: 6px; align-items: flex-start;"):
+                    ui.icon("check_circle").classes("text-green-6").style("font-size: 18px; margin-top: 2px;")
+                    ui.label(item).classes("text-body2").style("line-height: 1.4;")
 
     def _render_input_area(self):
-        """
-        Render the input form: a textarea for multiline address input
-        and a 'Validate All' button that triggers backend validation.
-        """
-        with ui.card().classes("q-pa-md q-mb-md").style("width: 100%"):
-            ui.label("Paste address(es) below:").classes("text-h6 q-mb-xs")
-            ui.label("💡 One address per line. Example format shown below:").classes("text-caption text-grey q-mb-sm")
+        with ui.card().classes("bg-white").style("width: 100%; padding: 16px;"):
+            ui.label("Paste address(es) below:").classes("text-body1 text-bold q-mb-sm")
+
+            with ui.row().classes("items-start q-mb-sm").style("gap: 8px;"):
+                ui.icon("lightbulb").classes("text-yellow-7").style("font-size: 18px; margin-top: 2px;")
+                ui.label("One address per line. Example format shown below:").classes("text-caption text-grey")
 
             ui.html(
                 (
                     '<div style="background-color: #f5f5f5; border: 1px dashed #ccc; '
-                    'padding: 8px; font-family: monospace; white-space: pre-line;">'
+                    'padding: 8px; font-family: monospace; white-space: pre-line; margin-bottom: 12px;">'
                     "Address 1: 3A Ridley Park, Singapore 248472<br>"
                     "Address 2: 288E Jurong East Street 21, #12-34, 605288"
                     "</div>"
@@ -108,18 +148,18 @@ class HomePage:
                     placeholder="Paste one address per line here...",
                     value="3A Ridley Park, Singapore 248472\n288E Jurong East Street 21, #12-34, 605288",
                 )
-                .props("autogrow rows=6")
-                .style("width: 100%")
+                .props("autogrow rows=4")
+                .style("width: 100%; margin-bottom: 12px;")
             )
 
-            ui.button("Validate All", on_click=self.on_validate_click).classes("q-mt-md")
+            ui.button("VALIDATE ALL", on_click=self.on_validate_click).classes("q-mt-sm")
 
     def _render_results_container(self):
         """
         Create an empty container where the results table will be injected
         after address validation.
         """
-        self.results_container = ui.element("div").classes("q-mt-md").style("width: 100%")
+        self.results_container = ui.element("div").style("width: 100%; min-height: 300px;")
 
     async def on_validate_click(self):
         """
@@ -141,18 +181,44 @@ class HomePage:
             row = map_ctx_to_row(ctx, raw_address=addr)
             table_rows.append(row)
 
-        if table_rows:
-            with self.results_container:
-                with ui.card().classes("q-pa-md"):
+        FULL_COLUMNS = [
+            {"name": RAW_ADDRESS, "label": "Address", "field": RAW_ADDRESS},
+            {"name": VALIDATE_STATUS, "label": "Validation", "field": VALIDATE_STATUS},
+            {"name": BLOCK_NUMBER, "label": "Block Number", "field": BLOCK_NUMBER},
+            {"name": STREET_NAME, "label": "Street", "field": STREET_NAME},
+            {"name": UNIT_NUMBER, "label": "Unit Number", "field": UNIT_NUMBER},
+            {"name": POSTAL_CODE, "label": "Postal Code", "field": POSTAL_CODE},
+            {"name": PROPERTY_TYPE, "label": "Property Type", "field": PROPERTY_TYPE},
+        ]
+
+        MOBILE_COLUMNS = [
+            {"name": RAW_ADDRESS, "label": "Address", "field": RAW_ADDRESS},
+            {"name": VALIDATE_STATUS, "label": "Validation", "field": VALIDATE_STATUS},
+            {"name": PROPERTY_TYPE, "label": "Property Type", "field": PROPERTY_TYPE},
+        ]
+
+        expanded_rows = self.expanded_rows
+
+        viewport_width = self._last_known_width or 9999
+        is_mobile = viewport_width < 600
+
+        def toggle_row(row):
+            key = row[RAW_ADDRESS]
+            if key in expanded_rows:
+                expanded_rows.remove(key)
+            else:
+                expanded_rows.add(key)
+            ui.refresh()
+
+        with self.results_container:
+            with ui.card().style("overflow-x: auto; width: 100%;"):
+                if is_mobile:
                     ui.table(
-                        columns=[
-                            {"name": RAW_ADDRESS, "label": "Address", "field": RAW_ADDRESS},
-                            {"name": VALIDATE_STATUS, "label": "Validation", "field": VALIDATE_STATUS},
-                            {"name": BLOCK_NUMBER, "label": "Block Number", "field": BLOCK_NUMBER},
-                            {"name": STREET_NAME, "label": "Street", "field": STREET_NAME},
-                            {"name": UNIT_NUMBER, "label": "Unit Number", "field": UNIT_NUMBER},
-                            {"name": POSTAL_CODE, "label": "Postal Code", "field": POSTAL_CODE},
-                            {"name": PROPERTY_TYPE, "label": "Property Type", "field": PROPERTY_TYPE},
-                        ],
+                        columns=MOBILE_COLUMNS,
                         rows=table_rows,
-                    ).props("wrap-cells").style("overflow-x: auto;")
+                    ).props("wrap-cells").style("width: 100%;")
+                else:
+                    ui.table(
+                        columns=FULL_COLUMNS,
+                        rows=table_rows,
+                    ).props("wrap-cells").style("width: 100%;")

@@ -36,7 +36,7 @@ upload_image_tag_to_s3() {
 upload_deploy_script_to_s3() {
   local bucket="$1"
   log "Uploading deploy script to s3://$bucket/deploy-address-validator-on-aws.sh"
-  aws s3 cp "$SCRIPT_DIR/deploy_prod.sh" "s3://$bucket/deploy-address-validator-on-aws.sh"
+  aws s3 cp "$SCRIPT_DIR/deploy-address-validator-on-aws.sh" "s3://$bucket/deploy-address-validator-on-aws.sh"
 }
 
 # --- Step 4: Deploy to EC2 via SSM ---
@@ -45,18 +45,15 @@ deploy_via_ssm() {
   local region="$2"
   local bucket="$3"
 
-  log "Triggering remote deploy via SSM..."
+  log "Triggering remote deploy via SSM…"
   aws ssm send-command \
     --document-name "AWS-RunShellScript" \
     --instance-ids "$instance_id" \
     --region "$region" \
     --comment "Deploy latest image via uploaded script" \
-    --parameters commands="[\
-      'aws s3 cp s3://$bucket/deploy-address-validator-on-aws.sh /tmp/deploy.sh',\
-      'chmod +x /tmp/deploy.sh',\
-      '/tmp/deploy.sh $bucket'\
-    ]" \
-    --output text
+    --parameters commands=["aws s3 cp s3://$bucket/deploy-address-validator-on-aws.sh /tmp/deploy.sh","chmod +x /tmp/deploy.sh","/tmp/deploy.sh $bucket"] \
+    --cloud-watch-output-config '{"CloudWatchOutputEnabled":true,"CloudWatchLogGroupName":"/ssm/deploy"}' \
+    --query "Command.CommandId" --output text
 }
 
 # --- Main Execution ---
