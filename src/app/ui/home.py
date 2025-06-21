@@ -98,7 +98,7 @@ class HomePage:
             with (
                 ui.row()
                 .classes("items-center justify-between q-px-md")
-                .style("max-width: 1140px; margin: auto; height: 56px;")
+                .style("max-width: 1140px; margin: auto; flex-wrap: wrap; gap: 4px; height: auto; min-height: 56px;")
             ):
                 with ui.row().classes("items-center gap-2"):
                     ui.icon("home").classes("text-white")
@@ -109,33 +109,34 @@ class HomePage:
                     ui.label("v1.0").classes("text-body2 text-grey-3")
 
     def _render_intro(self):
-        """Render the list of checks for clarity without repeating the page title."""
+        """Render checklist with inline tick icons and clean vertical alignment."""
         with ui.card().classes("bg-grey-1 q-mt-none").style("width: 100%"):
-            ui.label("✅ Checks for:").classes("text-body1 text-bold")
-            ui.html(
-                """
-                <ul style='margin-left: 1.2em; padding-left: 0.5em;'>
-                    <li>Missing unit number based on property type</li>
-                    <li>Invalid or missing postal code</li>
-                    <li>Match block number & street name against postal code</li>
-                    <li>Uses OneMap API and streetdirectory.com under the hood</li>
-                </ul>
-                """
-            )
+            ui.label("Checks for:").classes("text-body1 text-bold")
+
+            checklist_items = [
+                "Missing unit number based on property type",
+                "Invalid or missing postal code",
+                "Match block number & street name against postal code",
+                "Uses OneMap API and streetdirectory.com under the hood",
+            ]
+
+            for item in checklist_items:
+                with ui.row().classes("items-start").style("gap: 8px; margin-bottom: 6px; align-items: flex-start;"):
+                    ui.icon("check_circle").classes("text-green-6").style("font-size: 18px; margin-top: 2px;")
+                    ui.label(item).classes("text-body2").style("line-height: 1.4;")
 
     def _render_input_area(self):
-        """
-        A textarea for multiline address input
-        and a 'Validate All' button that triggers backend validation.
-        """
-        with ui.card().style("width: 100%"):
-            ui.label("Paste address(es) below:").classes("text-h6")
-            ui.label("💡 One address per line. Example format shown below:").classes("text-caption text-grey")
+        with ui.card().classes("bg-white").style("width: 100%; padding: 16px;"):
+            ui.label("Paste address(es) below:").classes("text-body1 text-bold q-mb-sm")
+
+            with ui.row().classes("items-start q-mb-sm").style("gap: 8px;"):
+                ui.icon("lightbulb").classes("text-yellow-7").style("font-size: 18px; margin-top: 2px;")
+                ui.label("One address per line. Example format shown below:").classes("text-caption text-grey")
 
             ui.html(
                 (
                     '<div style="background-color: #f5f5f5; border: 1px dashed #ccc; '
-                    'padding: 8px; font-family: monospace; white-space: pre-line;">'
+                    'padding: 8px; font-family: monospace; white-space: pre-line; margin-bottom: 12px;">'
                     "Address 1: 3A Ridley Park, Singapore 248472<br>"
                     "Address 2: 288E Jurong East Street 21, #12-34, 605288"
                     "</div>"
@@ -147,11 +148,11 @@ class HomePage:
                     placeholder="Paste one address per line here...",
                     value="3A Ridley Park, Singapore 248472\n288E Jurong East Street 21, #12-34, 605288",
                 )
-                .props("autogrow rows=6")
-                .style("width: 100%")
+                .props("autogrow rows=4")
+                .style("width: 100%; margin-bottom: 12px;")
             )
 
-            ui.button("VALIDATE ALL", on_click=self.on_validate_click)
+            ui.button("VALIDATE ALL", on_click=self.on_validate_click).classes("q-mt-sm")
 
     def _render_results_container(self):
         """
