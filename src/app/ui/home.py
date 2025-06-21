@@ -80,7 +80,7 @@ class HomePage:
         with (
             ui.column()
             .classes("items-center")
-            .style("width: 100vw; overflow-x: hidden; min-height: 100vh; margin: 0; padding-top: 70px;")
+            .style("width: 100vw; overflow-x: hidden; min-height: 100vh; margin: 0; padding-top: 56px;")
         ):
             with ui.column().style("max-width: 1140px; width: 100%; margin: auto;"):
                 self._render_navbar()
@@ -92,7 +92,7 @@ class HomePage:
         """Render a full-width top navigation bar."""
         with (
             ui.element("header")
-            .classes("bg-black text-white shadow-2")
+            .classes("bg-primary text-white shadow-2")
             .style("position: fixed; top: 0; left: 0; z-index: 1000; width: 100vw;")
         ):
             with (
@@ -102,15 +102,15 @@ class HomePage:
             ):
                 with ui.row().classes("items-center gap-2"):
                     ui.icon("home").classes("text-white")
-                    ui.label("Singapore Address Validator").classes("text-h6 text-white")
+                    ui.label("Singapore Address Validator").classes("text-h5 text-white")
 
                 with ui.row().classes("items-center gap-4"):
-                    ui.link("GitHub", "https://github.com/LYYYYL/AddressValidator").classes("text-white text-caption")
-                    ui.label("v1.0").classes("text-caption text-grey-4")
+                    ui.link("GitHub", "https://github.com/LYYYYL/AddressValidator").classes("text-white text-body2")
+                    ui.label("v1.0").classes("text-body2 text-grey-3")
 
     def _render_intro(self):
         """Render the list of checks for clarity without repeating the page title."""
-        with ui.card().classes("bg-grey-1").style("width: 100%"):
+        with ui.card().classes("bg-grey-1 q-mt-none").style("width: 100%"):
             ui.label("✅ Checks for:").classes("text-body1 text-bold")
             ui.html(
                 """
@@ -151,7 +151,7 @@ class HomePage:
                 .style("width: 100%")
             )
 
-            ui.button("VALIDATE ALL", on_click=self.on_validate_click).classes("bg-black text-white")
+            ui.button("VALIDATE ALL", on_click=self.on_validate_click)
 
     def _render_results_container(self):
         """
@@ -212,21 +212,10 @@ class HomePage:
         with self.results_container:
             with ui.card().style("overflow-x: auto; width: 100%;"):
                 if is_mobile:
-                    with ui.column().classes("gap-2"):
-                        for row in table_rows:
-                            with ui.card().style("width: 100%;"):
-                                with ui.row().classes("items-center justify-between").style("width: 100%;"):
-                                    ui.label(f"{row[RAW_ADDRESS]}").classes("text-bold")
-                                    ui.button(
-                                        "Hide" if row[RAW_ADDRESS] in expanded_rows else "Details",
-                                        on_click=lambda r=row: toggle_row(r),
-                                    ).props("flat")
-                                if row[RAW_ADDRESS] in expanded_rows:
-                                    with ui.column():
-                                        for col in FULL_COLUMNS:
-                                            key = col["name"]
-                                            if key not in [c["name"] for c in MOBILE_COLUMNS]:
-                                                ui.label(f"{col['label']}: {row.get(key, '-')}")
+                    ui.table(
+                        columns=MOBILE_COLUMNS,
+                        rows=table_rows,
+                    ).props("wrap-cells").style("width: 100%;")
                 else:
                     ui.table(
                         columns=FULL_COLUMNS,
