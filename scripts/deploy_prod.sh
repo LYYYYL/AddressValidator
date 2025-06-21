@@ -45,18 +45,19 @@ deploy_via_ssm() {
   local region="$2"
   local bucket="$3"
 
-  log "Triggering remote deploy via SSM..."
+  log "Triggering remote deploy via SSM…"
   aws ssm send-command \
     --document-name "AWS-RunShellScript" \
     --instance-ids "$instance_id" \
     --region "$region" \
     --comment "Deploy latest image via uploaded script" \
-    --parameters commands="[\
-      'aws s3 cp s3://$bucket/deploy-address-validator-on-aws.sh /tmp/deploy.sh',\
-      'chmod +x /tmp/deploy.sh',\
-      '/tmp/deploy.sh $bucket'\
-    ]" \
-    --output text
+    --parameters 'commands=[
+      "aws s3 cp s3://'"$bucket"'/deploy-address-validator-on-aws.sh /tmp/deploy.sh",
+      "chmod +x /tmp/deploy.sh",
+      "/tmp/deploy.sh '"$bucket"'"
+    ]' \
+    --cloud-watch-output-config '{"CloudWatchOutputEnabled":true,"CloudWatchLogGroupName":"/ssm/deploy"}' \
+    --query "Command.CommandId" --output text
 }
 
 # --- Main Execution ---
