@@ -51,11 +51,7 @@ deploy_via_ssm() {
     --instance-ids "$instance_id" \
     --region "$region" \
     --comment "Deploy latest image via uploaded script" \
-    --parameters 'commands=[
-      "aws s3 cp s3://'"$bucket"'/deploy-address-validator-on-aws.sh /tmp/deploy.sh",
-      "chmod +x /tmp/deploy.sh",
-      "/tmp/deploy.sh '"$bucket"'"
-    ]' \
+    --parameters commands=["aws s3 cp s3://$bucket/deploy-address-validator-on-aws.sh /tmp/deploy.sh","chmod +x /tmp/deploy.sh","/tmp/deploy.sh $bucket"] \
     --cloud-watch-output-config '{"CloudWatchOutputEnabled":true,"CloudWatchLogGroupName":"/ssm/deploy"}' \
     --query "Command.CommandId" --output text
 }
