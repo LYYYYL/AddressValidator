@@ -21,6 +21,22 @@ from address_validator.utils.common import extract_property_types
 from address_validator.validation import ValidateStatus
 
 
+def html_status_badge(status) -> str:
+    """
+    Return a coloured HTML badge for a validation status.
+    Accepts either a ValidateStatus enum or a plain string.
+    """
+    if isinstance(status, ValidateStatus):
+        status_str = status.value  # e.g. "Valid"
+        is_good = status is ValidateStatus.VALID
+    else:
+        status_str = str(status)
+        is_good = status_str.lower() == "valid"
+
+    colour = "positive" if is_good else "negative"  # Quasar palette names
+    return f'<span class="text-{colour} text-bold">{status_str}</span>'
+
+
 def map_ctx_to_row(ctx: dict, raw_address: str) -> dict:
     """
     Convert a validation context into a NiceGUI-compatible row dictionary.
@@ -48,7 +64,6 @@ def map_ctx_to_row(ctx: dict, raw_address: str) -> dict:
         row[UNIT_NUMBER] = ""
         row[POSTAL_CODE] = ""
         row[PROPERTY_TYPE] = ""
-        return row
     else:
         property_types = extract_property_types(ctx)
         property_type = property_types[0] if property_types else ""
@@ -58,16 +73,10 @@ def map_ctx_to_row(ctx: dict, raw_address: str) -> dict:
         row[STREET_NAME] = parsed_addr.get(STREET_NAME, "")
         row[UNIT_NUMBER] = parsed_addr.get(UNIT_NUMBER, "")
         row[POSTAL_CODE] = parsed_addr.get(POSTAL_CODE, "")
-        row[PROPERTY_TYPE] = property_type
 
-        if status == ValidateStatus.VALID:
-            return row
+        if status in [ValidateStatus.ADDRESS_AND_POSTCODE_MISMATCH, ValidateStatus.INVALID_POSTAL_CODE]:
+            row[PROPERTY_TYPE] = "-"
+        else:
+            row[PROPERTY_TYPE] = property_type
 
-        # else it depends on the error status:
-        row[PROPERTY_TYPE] = (
-            "-"
-            if status in [ValidateStatus.ADDRESS_AND_POSTCODE_MISMATCH, ValidateStatus.INVALID_POSTAL_CODE]
-            else property_type
-        )
-
-        return row
+    return row
