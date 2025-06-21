@@ -36,7 +36,7 @@ upload_image_tag_to_s3() {
 upload_deploy_script_to_s3() {
   local bucket="$1"
   log "Uploading deploy script to s3://$bucket/deploy-address-validator-on-aws.sh"
-  aws s3 cp "$SCRIPT_DIR/deploy_prod.sh" "s3://$bucket/deploy-address-validator-on-aws.sh"
+  aws s3 cp "$SCRIPT_DIR/deploy-address-validator-on-aws.sh" "s3://$bucket/deploy-address-validator-on-aws.sh"
 }
 
 # --- Step 4: Deploy to EC2 via SSM ---
