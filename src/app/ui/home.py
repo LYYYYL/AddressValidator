@@ -18,7 +18,7 @@ from address_validator.constants import (
     UNIT_NUMBER,
     VALIDATE_STATUS,
 )
-from address_validator.validation import AddressValidationFlow
+from address_validator.validation import AddressValidationFlow, ValidateStatus
 from app.ui.row_mapper import map_ctx_to_row
 
 
@@ -138,7 +138,9 @@ class HomePage:
                     '<div style="background-color: #f5f5f5; border: 1px dashed #ccc; '
                     'padding: 8px; font-family: monospace; white-space: pre-line; margin-bottom: 12px;">'
                     "Address 1: 3A Ridley Park, Singapore 248472<br>"
-                    "Address 2: 288E Jurong East Street 21, #12-34, 605288"
+                    "Address 2: 288E Jurong East Street 21, #12-34, 605288<br>"
+                    "Address 3: 111 Jurong East Street 21, #12-34, 605288 (Wrong block number)<br>"
+                    "Address 4: 288E, #12-34, 605288 (Missing street)<br>"
                     "</div>"
                 )
             )
@@ -146,7 +148,12 @@ class HomePage:
             self.textarea = (
                 ui.textarea(
                     placeholder="Paste one address per line here...",
-                    value="3A Ridley Park, Singapore 248472\n288E Jurong East Street 21, #12-34, 605288",
+                    value=(
+                        "3A Ridley Park, Singapore 248472\n"
+                        "288E Jurong East Street 21, #12-34, 605288\n"
+                        "111 Jurong East Street 21, #12-34, 605288\n"
+                        "288E, #12-34, 605288"
+                    ),
                 )
                 .props("autogrow rows=4")
                 .style("width: 100%; margin-bottom: 12px;")
@@ -183,7 +190,7 @@ class HomePage:
 
         FULL_COLUMNS = [
             {"name": RAW_ADDRESS, "label": "Address", "field": RAW_ADDRESS},
-            {"name": VALIDATE_STATUS, "label": "Validation", "field": VALIDATE_STATUS},
+            {"name": VALIDATE_STATUS, "label": "Status", "field": VALIDATE_STATUS},
             {"name": BLOCK_NUMBER, "label": "Block Number", "field": BLOCK_NUMBER},
             {"name": STREET_NAME, "label": "Street", "field": STREET_NAME},
             {"name": UNIT_NUMBER, "label": "Unit Number", "field": UNIT_NUMBER},
@@ -193,7 +200,7 @@ class HomePage:
 
         MOBILE_COLUMNS = [
             {"name": RAW_ADDRESS, "label": "Address", "field": RAW_ADDRESS},
-            {"name": VALIDATE_STATUS, "label": "Validation", "field": VALIDATE_STATUS},
+            {"name": VALIDATE_STATUS, "label": "Status", "field": VALIDATE_STATUS},
             {"name": PROPERTY_TYPE, "label": "Property Type", "field": PROPERTY_TYPE},
         ]
 
@@ -213,12 +220,38 @@ class HomePage:
         with self.results_container:
             with ui.card().style("overflow-x: auto; width: 100%;"):
                 if is_mobile:
-                    ui.table(
-                        columns=MOBILE_COLUMNS,
-                        rows=table_rows,
-                    ).props("wrap-cells").style("width: 100%;")
+                    table = (
+                        ui.table(
+                            columns=MOBILE_COLUMNS,
+                            rows=table_rows,
+                        )
+                        .props("wrap-cells")
+                        .style("width: 100%;")
+                    )
                 else:
-                    ui.table(
-                        columns=FULL_COLUMNS,
-                        rows=table_rows,
-                    ).props("wrap-cells").style("width: 100%;")
+                    table = (
+                        ui.table(
+                            columns=FULL_COLUMNS,
+                            rows=table_rows,
+                        )
+                        .props("wrap-cells")
+                        .style("width: 100%;")
+                    )
+
+                # Add conditional cell coloring for "Status" column
+                table.add_slot(
+                    f"body-cell-{VALIDATE_STATUS}",
+                    rf"""
+                    <q-td :props="props" :class="props.value === '{ValidateStatus.VALID.value}' ? 'bg-green-2 text-black' : 'bg-red-2 text-black'">
+                        {{{{ props.value }}}}
+                    </q-td>
+                """,
+                )
+                table.add_slot(
+                    f"body-cell-{PROPERTY_TYPE}",
+                    rf"""
+                    <q-td :props="props" :class="props.value !== '' ? 'bg-green-2 text-black' : 'bg-grey-2 text-black'">
+                        {{{{ props.value }}}}
+                    </q-td>
+                    """,  # noqa: F541 - needed for doubled braces in Vue template
+                )

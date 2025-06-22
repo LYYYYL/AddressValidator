@@ -21,20 +21,13 @@ from address_validator.utils.common import extract_property_types
 from address_validator.validation import ValidateStatus
 
 
-def html_status_badge(status) -> str:
-    """
-    Return a coloured HTML badge for a validation status.
-    Accepts either a ValidateStatus enum or a plain string.
-    """
-    if isinstance(status, ValidateStatus):
-        status_str = status.value  # e.g. "Valid"
-        is_good = status is ValidateStatus.VALID
+def get_row_class(row):
+    """Format the row class based on validation status."""
+    if row["Validation"] == ValidateStatus.VALID:
+        return "bg-green-1"
     else:
-        status_str = str(status)
-        is_good = status_str.lower() == "valid"
-
-    colour = "positive" if is_good else "negative"  # Quasar palette names
-    return f'<span class="text-{colour} text-bold">{status_str}</span>'
+        return "bg-red-1"
+    return ""
 
 
 def map_ctx_to_row(ctx: dict, raw_address: str) -> dict:
