@@ -1,6 +1,6 @@
 # Singapore Address Validator
 
-[👉 Visit the Web App](https://sgcheckaddresses.com/)
+[👉 Visit the Web App](https://54.253.236.7/)
 
 This project provides an address validation service tailored for small business owners in Singapore.
 It helps detect invalid or incomplete addresses, which are common causes of failed deliveries, redeliveries, and increased customer support.
