@@ -22,7 +22,6 @@ from address_validator.streetdirectory_client import (
     StreetDirectorySearchResult,
 )
 from address_validator.utils.common import extract_address_query_parts
-from address_validator.validation import ValidateStatus
 
 
 class SearchStreetDirectoryStep(ValidationStep):
@@ -88,7 +87,6 @@ class SearchStreetDirectoryStep(ValidationStep):
 
         # 2) If OK but no items at all, “no match”
         if not sd_result.items:
-            ctx[VALIDATE_STATUS] = ValidateStatus.NO_STREETDIRECTORY_MATCH
             return ctx
 
         # 3) Filter out any unwanted categories
@@ -106,7 +104,6 @@ class SearchStreetDirectoryStep(ValidationStep):
 
         # 4) If nothing remains, treat as “no match”
         if not filtered_items:
-            ctx[VALIDATE_STATUS] = ValidateStatus.NO_STREETDIRECTORY_MATCH
             return ctx
 
         # 5) Otherwise save the filtered list
