@@ -120,18 +120,21 @@ class HomePage:
                 "Uses OneMap API and streetdirectory.com under the hood",
             ]
 
-            for item in checklist_items:
-                with ui.row().classes("items-start").style("gap: 8px; margin-bottom: 6px; align-items: flex-start;"):
-                    ui.icon("check_circle").classes("text-green-6").style("font-size: 18px; margin-top: 2px;")
-                    ui.label(item).classes("text-body2").style("line-height: 1.4;")
+            with ui.column().classes("w-full gap-2"):
+                for text in checklist_items:
+                    with ui.row().classes("items-start"):
+                        ui.icon("check_circle").classes("text-green-600 mt-0.5")
+                        ui.label(text).classes("whitespace-normal leading-snug")
 
     def _render_input_area(self):
         with ui.card().classes("bg-white").style("width: 100%; padding: 16px;"):
             ui.label("Paste address(es) below:").classes("text-body1 text-bold q-mb-sm")
 
             with ui.row().classes("items-start q-mb-sm").style("gap: 8px;"):
-                ui.icon("lightbulb").classes("text-yellow-7").style("font-size: 18px; margin-top: 2px;")
-                ui.label("One address per line. Example format shown below:").classes("text-caption text-grey")
+                ui.icon("lightbulb").classes("text-yellow-7")
+                ui.label("One address per line. Example format shown below:").classes(
+                    "text-sm text-slate-700 font-medium"
+                )
 
             ui.html(
                 (
