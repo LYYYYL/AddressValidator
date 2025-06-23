@@ -122,9 +122,13 @@ class HomePage:
 
             with ui.column().classes("w-full gap-2"):
                 for text in checklist_items:
-                    with ui.row().classes("items-start"):
+                    # no-wrap so icon & label stay in one flex line
+                    # gap-2 just adds a bit of spacing
+                    with ui.row().props("no-wrap").classes("items-start gap-2"):
                         ui.icon("check_circle").classes("text-green-600 mt-0.5")
-                        ui.label(text).classes("whitespace-normal leading-snug")
+                        # flex-1 lets the label take the remaining width and
+                        # it will wrap inside its own box, keeping the left edge
+                        ui.label(text).classes("whitespace-normal leading-snug flex-1")
 
     def _render_input_area(self):
         with ui.card().classes("bg-white").style("width: 100%; padding: 16px;"):
